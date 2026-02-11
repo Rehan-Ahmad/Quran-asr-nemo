@@ -30,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset_name", default="hifzyml/quran_dataset_v0", help="HF dataset name")
     parser.add_argument("--output_dir", default="data", help="Output directory for manifests and audio")
     parser.add_argument("--audio_column", default="audio", help="Audio column name in dataset")
-    parser.add_argument("--text_column", default="text", help="Text/transcript column name in dataset")
+    parser.add_argument("--text_column", default="transcript", help="Text/transcript column name in dataset")
     parser.add_argument("--val_ratio", type=float, default=0.05, help="Validation split ratio")
     parser.add_argument("--test_ratio", type=float, default=0.05, help="Test split ratio")
     parser.add_argument("--copy_audio", action="store_true", help="Copy/resample audio into output_dir/audio")
