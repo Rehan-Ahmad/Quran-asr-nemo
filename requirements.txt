@@ -1,0 +1,5 @@
+nemo_toolkit[asr]
+datasets
+soundfile
+tqdm
+librosa
