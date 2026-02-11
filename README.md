@@ -44,20 +44,11 @@ python prepare_dataset.py \
 
 ### 3) Fine-tune
 
-The `train_nemo.sh` script automatically downloads the required NeMo training script and config from GitHub.
+The NeMo training script and config are included in `nemo_scripts/`:
 
 ```bash
 export DATA_DIR="$PWD/data"
 bash train_nemo.sh
-```
-
-The first run downloads (~5 MB) and caches the files in `.nemo_cache/`. Subsequent runs use the cache.
-
-**Override options:**
-
-```bash
-DATA_DIR=/path/to/data bash train_nemo.sh
-CACHE_DIR=/custom/cache DATA_DIR=$PWD/data bash train_nemo.sh
 ```
 
 To train on CPU (slow):
@@ -72,6 +63,24 @@ bash train_nemo.sh trainer.devices=1 trainer.accelerator=cpu
 - **Audio:** 16 kHz mono WAV (resampled automatically)
 - **Training approach:** Hybrid Transducer-CTC
 - **Decoders:** Transducer (RNNT) or CTC (configurable)
+
+## Project Structure
+
+```
+quranNemoASR/
+├── prepare_dataset.py           # Dataset preparation script
+├── train_nemo.sh                # Training launcher
+├── requirements.txt             # Python dependencies
+├── README.md                    # This file
+├── .gitignore                   # Git ignore rules
+├── nemo_scripts/                # NeMo official scripts (downloaded from GitHub)
+│   ├── speech_to_text_hybrid_rnnt_ctc_bpe.py
+│   └── fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml
+└── data/                        # Dataset (created during preparation)
+    ├── manifests/               # Train/val/test JSON manifests
+    ├── audio/                   # 16 kHz mono WAV files
+    └── vocab.txt                # Character vocabulary
+```
 
 ## Troubleshooting
 
