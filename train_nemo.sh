@@ -21,8 +21,9 @@ python "$SCRIPT_PATH" \
   model.test_ds.batch_size=8 \
   model.tokenizer.dir="$TOKENIZER_DIR" \
   model.tokenizer.type="bpe" \
-  trainer.devices=1 \
+  trainer.devices=2 \
   trainer.accelerator=gpu \
+  trainer.strategy=ddp \
   trainer.max_epochs=10 \
   trainer.log_every_n_steps=5
 
