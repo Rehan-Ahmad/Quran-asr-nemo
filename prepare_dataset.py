@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import librosa
@@ -8,6 +9,12 @@ import numpy as np
 import soundfile as sf
 from datasets import Audio, load_dataset
 from tqdm import tqdm
+
+# Set HuggingFace cache to local directory if not already set
+if "HF_DATASETS_CACHE" not in os.environ:
+    local_cache = Path.cwd() / ".hf_cache"
+    os.environ["HF_DATASETS_CACHE"] = str(local_cache)
+    local_cache.mkdir(exist_ok=True)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
