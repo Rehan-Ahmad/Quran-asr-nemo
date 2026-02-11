@@ -1,0 +1,734 @@
+[NeMo I 2026-02-12 00:58:51 speech_to_text_hybrid_rnnt_ctc_bpe:75] Hydra config: name: FastConformer-Hybrid-Transducer-CTC-BPE-Streaming
+    model:
+      sample_rate: 16000
+      compute_eval_loss: false
+      log_prediction: true
+      skip_nan_grad: false
+      model_defaults:
+        enc_hidden: ${model.encoder.d_model}
+        pred_hidden: 640
+        joint_hidden: 640
+      train_ds:
+        manifest_filepath: /data/SAB_PhD/quranNemoASR/data/manifests/train.json
+        sample_rate: ${model.sample_rate}
+        batch_size: 16
+        shuffle: true
+        num_workers: 8
+        pin_memory: true
+        max_duration: 20
+        min_duration: 0.1
+        is_tarred: false
+        tarred_audio_filepaths: null
+        shuffle_n: 2048
+        bucketing_strategy: synced_randomized
+        bucketing_batch_size: null
+      validation_ds:
+        manifest_filepath: /data/SAB_PhD/quranNemoASR/data/manifests/val.json
+        sample_rate: ${model.sample_rate}
+        batch_size: 16
+        shuffle: false
+        use_start_end_token: false
+        num_workers: 8
+        pin_memory: true
+      test_ds:
+        manifest_filepath: /data/SAB_PhD/quranNemoASR/data/manifests/test.json
+        sample_rate: ${model.sample_rate}
+        batch_size: 16
+        shuffle: false
+        use_start_end_token: false
+        num_workers: 8
+        pin_memory: true
+      tokenizer:
+        dir: /data/SAB_PhD/quranNemoASR/tokenizer/tokenizer_spe_bpe_v1024_bos_eos
+        type: bpe
+      preprocessor:
+        _target_: nemo.collections.asr.modules.AudioToMelSpectrogramPreprocessor
+        sample_rate: ${model.sample_rate}
+        normalize: NA
+        window_size: 0.025
+        window_stride: 0.01
+        window: hann
+        features: 80
+        n_fft: 512
+        frame_splicing: 1
+        dither: 1.0e-05
+        pad_to: 0
+      spec_augment:
+        _target_: nemo.collections.asr.modules.SpectrogramAugmentation
+        freq_masks: 2
+        time_masks: 10
+        freq_width: 27
+        time_width: 0.05
+      encoder:
+        _target_: nemo.collections.asr.modules.ConformerEncoder
+        feat_in: ${model.preprocessor.features}
+        feat_out: -1
+        n_layers: 17
+        d_model: 512
+        use_bias: true
+        subsampling: dw_striding
+        subsampling_factor: 8
+        subsampling_conv_channels: 256
+        causal_downsampling: true
+        ff_expansion_factor: 4
+        self_attention_model: rel_pos
+        n_heads: 8
+        att_context_size:
+        - 70
+        - 13
+        att_context_style: chunked_limited
+        att_context_probs: null
+        xscaling: true
+        pos_emb_max_len: 5000
+        conv_kernel_size: 9
+        conv_norm_type: layer_norm
+        conv_context_size: causal
+        dropout: 0.1
+        dropout_pre_encoder: 0.1
+        dropout_emb: 0.0
+        dropout_att: 0.1
+        stochastic_depth_drop_prob: 0.0
+        stochastic_depth_mode: linear
+        stochastic_depth_start_layer: 1
+      decoder:
+        _target_: nemo.collections.asr.modules.RNNTDecoder
+        normalization_mode: null
+        random_state_sampling: false
+        blank_as_pad: true
+        prednet:
+          pred_hidden: ${model.model_defaults.pred_hidden}
+          pred_rnn_layers: 1
+          t_max: null
+          dropout: 0.2
+      joint:
+        _target_: nemo.collections.asr.modules.RNNTJoint
+        log_softmax: null
+        preserve_memory: false
+        fuse_loss_wer: true
+        fused_batch_size: 4
+        jointnet:
+          joint_hidden: ${model.model_defaults.joint_hidden}
+          activation: relu
+          dropout: 0.2
+      decoding:
+        strategy: greedy_batch
+        greedy:
+          max_symbols: 10
+        beam:
+          beam_size: 2
+          return_best_hypothesis: false
+          score_norm: true
+          tsd_max_sym_exp: 50
+          alsd_max_target_len: 2.0
+      aux_ctc:
+        ctc_loss_weight: 0.3
+        use_cer: false
+        ctc_reduction: mean_batch
+        decoder:
+          _target_: nemo.collections.asr.modules.ConvASRDecoder
+          feat_in: null
+          num_classes: -1
+          vocabulary: []
+        decoding:
+          strategy: greedy
+      interctc:
+        loss_weights: []
+        apply_at_layers: []
+      loss:
+        loss_name: default
+        warprnnt_numba_kwargs:
+          fastemit_lambda: 0.005
+          clamp: -1.0
+      optim:
+        name: adamw
+        lr: 5.0
+        betas:
+        - 0.9
+        - 0.98
+        weight_decay: 0.001
+        sched:
+          name: NoamAnnealing
+          d_model: ${model.encoder.d_model}
+          warmup_steps: 10000
+          warmup_ratio: null
+          min_lr: 1.0e-06
+    trainer:
+      devices: 1
+      num_nodes: 1
+      max_epochs: 1000
+      max_steps: -1
+      val_check_interval: 1.0
+      accelerator: gpu
+      strategy:
+        _target_: lightning.pytorch.strategies.DDPStrategy
+        gradient_as_bucket_view: true
+      accumulate_grad_batches: 1
+      gradient_clip_val: 1.0
+      precision: 32
+      log_every_n_steps: 10
+      enable_progress_bar: true
+      num_sanity_val_steps: 0
+      check_val_every_n_epoch: 1
+      sync_batchnorm: true
+      enable_checkpointing: false
+      logger: false
+      benchmark: false
+    exp_manager:
+      exp_dir: null
+      name: ${name}
+      create_tensorboard_logger: true
+      create_checkpoint_callback: true
+      checkpoint_callback_params:
+        monitor: val_wer
+        mode: min
+        save_top_k: 5
+        always_save_nemo: true
+      resume_from_checkpoint: null
+      resume_if_exists: false
+      resume_ignore_no_checkpoint: false
+      create_wandb_logger: false
+      wandb_logger_kwargs:
+        name: null
+        project: null
+    
+[NeMo I 2026-02-12 00:58:51 exp_manager:594] ExpManager schema
+[NeMo I 2026-02-12 00:58:51 exp_manager:595] {'explicit_log_dir': None, 'exp_dir': None, 'name': None, 'version': None, 'use_datetime_version': True, 'resume_if_exists': False, 'resume_past_end': False, 'resume_ignore_no_checkpoint': False, 'resume_from_checkpoint': None, 'create_tensorboard_logger': True, 'summary_writer_kwargs': None, 'create_wandb_logger': False, 'wandb_logger_kwargs': None, 'create_mlflow_logger': False, 'mlflow_logger_kwargs': {'experiment_name': None, 'run_name': None, 'tracking_uri': None, 'tags': None, 'save_dir': './mlruns', 'prefix': '', 'artifact_location': None, 'run_id': None, 'log_model': False}, 'create_dllogger_logger': False, 'dllogger_logger_kwargs': {'verbose': False, 'stdout': False, 'json_file': './dllogger.json'}, 'create_clearml_logger': False, 'clearml_logger_kwargs': {'project': None, 'task': None, 'connect_pytorch': False, 'model_name': None, 'tags': None, 'log_model': False, 'log_cfg': False, 'log_metrics': False}, 'create_neptune_logger': False, 'neptune_logger_kwargs': None, 'create_checkpoint_callback': True, 'checkpoint_callback_params': {'filepath': None, 'dirpath': None, 'filename': None, 'monitor': 'val_loss', 'verbose': True, 'save_last': True, 'save_top_k': 3, 'save_weights_only': False, 'mode': 'min', 'auto_insert_metric_name': True, 'every_n_epochs': 1, 'every_n_train_steps': None, 'train_time_interval': None, 'prefix': None, 'postfix': '.nemo', 'save_best_model': False, 'always_save_nemo': False, 'save_nemo_on_train_end': True, 'model_parallel_size': None, 'save_on_train_epoch_end': False, 'async_save': False, 'save_last_n_optim_states': -1}, 'create_early_stopping_callback': False, 'create_ipl_epoch_stopper_callback': False, 'early_stopping_callback_params': {'monitor': 'val_loss', 'mode': 'min', 'min_delta': 0.001, 'patience': 10, 'verbose': True, 'strict': True, 'check_finite': True, 'stopping_threshold': None, 'divergence_threshold': None, 'check_on_train_epoch_end': None, 'log_rank_zero_only': False}, 'ipl_epoch_stopper_callback_params': {'enable_stop': True, 'stop_every_n_epochs': 1}, 'create_preemption_callback': True, 'files_to_copy': None, 'log_step_timing': True, 'log_delta_step_timing': False, 'step_timing_kwargs': {'reduction': 'mean', 'sync_cuda': False, 'buffer_size': 1}, 'log_local_rank_0_only': False, 'log_global_rank_0_only': False, 'disable_validation_on_resume': True, 'ema': {'enable': False, 'decay': 0.999, 'cpu_offload': False, 'validate_original_weights': False, 'every_n_steps': 1}, 'max_time_per_run': None, 'seconds_to_sleep': 5.0, 'create_straggler_detection_callback': False, 'straggler_detection_params': {'report_time_interval': 300.0, 'calc_relative_gpu_perf': True, 'calc_individual_gpu_perf': True, 'num_gpu_perf_scores_to_log': 5, 'gpu_relative_perf_threshold': 0.7, 'gpu_individual_perf_threshold': 0.7, 'stop_if_detected': False}, 'create_fault_tolerance_callback': False, 'fault_tolerance': {'workload_check_interval': 5.0, 'initial_rank_heartbeat_timeout': 3600.0, 'rank_heartbeat_timeout': 2700.0, 'calculate_timeouts': True, 'safety_factor': 5.0, 'rank_termination_signal': <Signals.SIGKILL: 9>, 'log_level': 'INFO', 'max_rank_restarts': 0, 'max_subsequent_job_failures': 0, 'additional_ft_launcher_args': '', 'simulated_fault': None}, 'log_tflops_per_sec_per_gpu': True}
+[NeMo I 2026-02-12 00:58:51 exp_manager:655] Experiments will be logged at /data/SAB_PhD/quranNemoASR/nemo_experiments/FastConformer-Hybrid-Transducer-CTC-BPE-Streaming/2026-02-12_00-58-51
+[NeMo I 2026-02-12 00:58:51 exp_manager:1262] TensorboardLogger has been set up
+[NeMo I 2026-02-12 00:58:51 exp_manager:804] TFLOPs per sec per GPU will be calculated, conditioned on supported models. Defaults to -1 upon failure.
+[NeMo I 2026-02-12 00:58:51 mixins:184] Tokenizer SentencePieceTokenizer initialized with 1024 tokens
+[NeMo I 2026-02-12 00:58:51 hybrid_rnnt_ctc_bpe_models:87] 
+    Replacing placholder number of classes (-1) with actual number of classes - 1024
+[NeMo I 2026-02-12 00:58:55 collections:201] Dataset loaded with 57846 files totalling 145.72 hours
+[NeMo I 2026-02-12 00:58:55 collections:202] 9553 files were filtered totalling 64.33 hours
+[NeMo I 2026-02-12 00:58:56 collections:201] Dataset loaded with 3745 files totalling 11.69 hours
+[NeMo I 2026-02-12 00:58:56 collections:202] 0 files were filtered totalling 0.00 hours
+[NeMo I 2026-02-12 00:58:56 collections:201] Dataset loaded with 3745 files totalling 11.50 hours
+[NeMo I 2026-02-12 00:58:56 collections:202] 0 files were filtered totalling 0.00 hours
+[NeMo I 2026-02-12 00:58:56 features:306] PADDING: 0
+[NeMo I 2026-02-12 00:58:57 rnnt_models:226] Using RNNT Loss : warprnnt_numba
+    Loss warprnnt_numba_kwargs: {'fastemit_lambda': 0.005, 'clamp': -1.0}
+[NeMo I 2026-02-12 00:58:57 rnnt_models:226] Using RNNT Loss : warprnnt_numba
+    Loss warprnnt_numba_kwargs: {'fastemit_lambda': 0.005, 'clamp': -1.0}
+[NeMo I 2026-02-12 00:58:57 rnnt_models:226] Using RNNT Loss : warprnnt_numba
+    Loss warprnnt_numba_kwargs: {'fastemit_lambda': 0.005, 'clamp': -1.0}
+[NeMo I 2026-02-12 00:58:58 modelPT:830] Optimizer config = AdamW (
+    Parameter Group 0
+        amsgrad: False
+        betas: (0.9, 0.98)
+        capturable: False
+        decoupled_weight_decay: True
+        differentiable: False
+        eps: 1e-08
+        foreach: None
+        fused: None
+        lr: 5.0
+        maximize: False
+        weight_decay: 0.001
+    )
+[NeMo I 2026-02-12 00:58:58 lr_scheduler:995] Scheduler "<nemo.core.optim.lr_scheduler.NoamAnnealing object at 0x7aeff254bd00>" 
+    will be used during training (effective maximum steps = 3616000) - 
+    Parameters : 
+    (d_model: 512
+    warmup_steps: 10000
+    warmup_ratio: null
+    min_lr: 1.0e-06
+    max_steps: 3616000
+    )
+[NeMo I 2026-02-12 00:58:59 asr_model:198] CUDA graphs disabled for EncDecHybridRNNTCTCBPEModel::RNNTBPEDecoding::GreedyBatchedRNNTInfer
+[NeMo W 2026-02-12 00:59:01 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 4 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:01 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 4 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:03 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 1 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:03 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 4 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:03 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 1 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo I 2026-02-12 00:59:07 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:07 wer:337] WER reference:بَشِيرًا وَنَذِيرًا فَأَعْرَضَ أَكْثَرُهُمْ فَهُمْ لَا يَسْمَعُونَ
+[NeMo I 2026-02-12 00:59:07 wer:338] WER predicted:رأَرْضِرأَرْضِرأَرْضِرأَرْضِرأَرْضِطَطَوَاطَوَاطَوَاطَوَاوَاطَطَطَأَرْضِ وَهُوَ وَهُوَأَرْضِطَأَرْضِطَرعع سُ سُ سُ سُ سُ سُ سُقُرْقُرْأَرْضِأَرْضِرقُرْأَرْضِأَرْضِرقُرْأَرْضِأَرْضِرقُرْأَرْضِأَرْضِرقُرْأَرْضِأَرْضِررأَرْضِرأَرْضِرأَرْضِر وَيُأَرْضِر وَهُوَ وَهُوَ وَهُوَ وَهُوَ يَحْ سُ سُ سُ سُرررر وَبِررر وَبِر لَهُع سُ سُ سُ سُ سُ سُ سُ سُررررررررررقُرْقُرْ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِععععععع سُضُعض أَرْسَلْنَا الأَرْضِض الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِنٍطَأَرْضِر وَبِ وَبِ الأَرْضِ وَبِ الأَرْضِ وَبِ الأَرْضِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ لَهُ لَهُ لَهُ لَهُقُرْ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُقُرْ يَحْع يَحْع يَحْ يَحْع يَحْر سُ سُ سُ سُ سُ سُ سُ سُ سُ سُقُرْ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِع وَبِ وَبِع وَبِ وَبِ وَبِع وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِرر وَبِقُرْ وَبِقُرْ وَبِقُرْ وَبِقُرْطَطَطَطَوَاطَوَاطَوَاطَنٍععع سُنٍع سُنٍعتَّقُونَتَّقُونَتَّقُونَتَّقُونَعتَّقُونَتَّقُونَتَّقُونَتَّقُونَتَّقُونَرررررضر سُرر سُ سُ سُ سُ سُ سُ سُ سُ سُ سُقُرْ سُ سُقُرْ سُ سُقُرْنٍنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَتَّقُونَنٍتَّقُونَتَّقُونَعتَّقُونَتَّقُونَتَّقُونَتَّقُونَررررررررررقُرْأَرْضِعأَرْضِعأَرْضِععأَرْضِع اللَّهَ اللَّهَر اللَّهَ اللَّهَر اللَّهَر اللَّهَ وَبِرقُرْ وَبِ وَبِ الأَرْضِقُرْ وَبِ الأَرْضِنٍ وَبِقُرْ الأَرْضِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍطَنٍنٍطَنٍطَنٍطَنٍطَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ الأَرْضِنٍ الأَرْضِنٍ الأَرْضِ يَن الأَرْضِ يَن الأَرْضِ يَننٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍعععععععععع وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ لَهُ لَهُ لَهُ لَهُنٍطَطَ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍنٍنٍتَّقُونَنٍنٍتَّقُونَ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ عَن عَن عَن سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍطَطَطَطَطَطَطَطَطَطَوَاوَانٍ سُنٍ سُ سُ سُوَانٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍعنٍعنٍعنٍعنٍعع سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ وَيُنٍ وَيُوَا وَيُ وَيُ وَبِ وَبِ الأَرْضِعنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍعأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِرقُرْأَرْضِأَرْضِرقُرْأَرْضِأَرْضِرقُرْنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُطَطَطَطَطَطَطَطَطَطَنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُقُرْسْتَسْتَع عَن عَن عَن عَن عَن عَن يَهْ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُقُرْنٍعنٍنٍنٍنٍنٍنٍنٍعنٍع سَبِيلِعع لَكُمْ سَبِيلِع سَبِيلِطَطَطَطَطَأَرْضِطَأَرْضِطَطَ
+[NeMo I 2026-02-12 00:59:09 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:09 wer:337] WER reference:فَإِنَّكَ لَا تُسْمِعُ الْمَوْتَى وَلَا تُسْمِعُ الصُّمَّ الدُّعَاء إِذَا وَلَّوْا مُدْبِرِينَ
+[NeMo I 2026-02-12 00:59:09 wer:338] WER predicted:قُلُوتِي قُلُو قُلُوتِي قُلُو قُلُو قُلُوتِي قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو الأَرْضِ قُلُو قُلُو قُلُو الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِقُرْقُرْ الأَرْضِقُرْ الأَرْضِتِيطَقُرْتِيتَّقُونَ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُطَ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُقُرْ سُقُرْ سُقُرْ قُلُو قُلُو قُلُو قُلُو قُلُو الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُع قُلُوتَّقُونَ سُطَنٍطَطَطَطَطَطَطَ قُلُو سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُتِيتِيتِيتِي قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍطَنٍطَنٍطَطَطَطَطَطَ سُ سُ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ وَيُ سُ سُ سُ سُ لَهُ وَيُ سُ سُ لَهُ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُقُرْ سُأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ وَيُ سُ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُطَنٍطَنٍطَنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ الأَرْضِوَا الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَنٍنٍنٍ إِلاَّنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍطَطَطَطَطَطَطَطَطَطَنٍ وَهُوَ وَهُوَ وَهُوَ سُ سُقُرْنٍ سُ سُ الأَرْضِنٍ الأَرْضِنٍ الأَرْضِطَنٍطَوَاعنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ عَنِ سُ سُ عَنِ الأَرْضِ سُ سُ سُنٍ الأَرْضِ الأَرْضِ سُ الأَرْضِ الأَرْضِ الأَرْضِ سُ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِقُرْ الأَرْضِقُرْ الأَرْضِقُرْ الأَرْضِ الأَرْضِقُرْ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِنٍنٍنٍضضضضضضض سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ لَهُ لَهُ لَهُ وَيُنٍ سُنٍ سُنٍ سُنٍطَنٍتَّقُونَنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍطَطَطَطَطَطَطَطَطَطَأَرْضِرأَرْضِرأَرْضِرأَرْضِرأَرْضِرأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِر سُ سُ سُ سُ سُ سُ سُ سُ سُ لَهُ لَهُ لَهُ لَهُ وَيُ وَبِ سُ لَهُ لَهُ وَيُعععع ينٍسْتَعع يطَتِيطَطَضطَضضضضع سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍتَّقُونَنٍنٍتَّقُونَنٍنٍنٍنٍ سُوَانٍنٍنٍنٍنٍنٍنٍ سُنٍ الأَرْضِنٍ الأَرْضِ سُ الأَرْضِ سُ الأَرْضِ سُنٍتَّقُونَنٍنٍتَّقُونَنٍنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ الأَرْضِنٍ الأَرْضِنٍ الأَرْضِنٍ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِقُرْ الأَرْضِ الأَرْضِ الأَرْضِقُرْ الأَرْضِ الأَرْضِ الأَرْضِقُرْ الأَرْضِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ لَّمْ لَّمْوَا الأَرْضِ الأَرْضِ الأَرْضِقُرْ الأَرْضِ الأَرْضِقُرْنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَنٍتَّقُونَنٍتَّقُونَنٍنٍتَّقُونَنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ الأَرْضِ الأَرْضِنٍ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ الأَرْضِ وَبِ وَبِ الأَرْضِ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُوَانٍنٍنٍنٍنٍنٍنٍنٍنٍطَطَطَطَطَطَطَطَطَطَنٍنٍنٍنٍنٍ سُنٍ سُنٍنٍ لَهُ لَهُ سَ سَ سُ لَهُ لَهُ لَهُ قُلُو سُنٍ سُنٍنٍنٍ وَبِ وَبِ وَبِ وَبِ وَبِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍعْلَمُونَنٍعْلَمُونَعْلَمُونَعْلَمُونَ وَبِ وَبِ وَبِ وَبِ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُتَّقُونَعع سُنٍسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍضضضضضضضطَ إِذَاطَنٍطَنٍضطَنٍضطَنٍضنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُع سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُعْطَطَطَطَطَطَطَطَطَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَنٍنٍتَّقُونَنٍنٍنٍتَّقُونَنٍنٍنٍطَنٍطَطَطَطَطَطَطَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ سُ لَهُ لَهُ سُ سُ سُ سُ سُ الأَرْضِنٍ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ أَرْسَلْنَا أَرْسَلْنَا أَرْسَلْنَاضضضضضضضسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَ قُلُوطَطَنٍطَنٍنٍنٍنٍنٍتَّقُونَنٍتَّقُونَنٍنٍتَّقُونَنٍنٍتَّقُونَنٍنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍتَّقُونَ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ سُ الأَرْضِ سُ سُأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍطَنٍطَنٍطَنٍطَنٍطَنٍتَّقُونَتَّقُونَتَّقُونَتَّقُونَتَّقُونَتَّقُونَتَّقُونَتَّقُونَتَّقُونَتَّقُونَ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِ الأَرْضِنٍنٍ لَّمْ لَهُ لَّمْ لَهُ لَهُ لَّمْ لَهُ لَهُ قُلُو قُلُو قُلُو قُلُو قُلُو قُلُورْض قُلُورْضنٍ سُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ وَيُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍنٍنٍتَّقُونَنٍنٍ الأَرْضِنٍ الأَرْضِنٍ الأَرْضِنٍ الأَرْضِنٍ الأَرْضِ الأَرْضِنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَتَّقُونَنٍتَّقُونَنٍتَّقُونَتَّقُونَنٍتَّقُونَنٍ
+[NeMo I 2026-02-12 00:59:10 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:10 wer:337] WER reference:فَيَذَرُهَا قَاعًا صَفْصَفًا
+[NeMo I 2026-02-12 00:59:10 wer:338] WER predicted:سَ سَ سَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتِيتِي وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِقُرْ وَبِقُرْ وَبِ وَبِقُرْ وَبِ وَبِقُرْ وَبِوَّقُرْنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِأَرْضِر وَبِ وَبِ وَبِ وَبِ وَبِقُرْ وَبِ وَبِقُرْطَطَطَطَنٍطَنٍطَنٍطَتَّقُونَتَّقُونَأَرْضِ وَبِتَّقُونَتَّقُونَأَرْضِر وَبِتَّقُونَ قُلُوتَّقُونَ قُلُوتَّقُونَ سُنٍ قُلُوتَّقُونَنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَ سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍطَنٍطَطَطَطَطَطَطَطَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ وَيُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ لَهُنٍنٍنٍنٍنٍتَّقُونَنٍنٍنٍتَّقُونَتَّقُونَ سُتَّقُونَ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍوَّنٍوَّنٍوَّضُوَّضُوَّضُنٍض قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُونٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَ عَن عَن عَن عَنتَّقُونَ عَنتَّقُونَ عَنتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍعنٍتَّقُونَنٍنٍعنٍتَّقُونَنٍعطَطَععطَعطَععطَ وَلَانٍتَّقُونَنٍتَّقُونَنٍتَّقُونَنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَسْتَ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ سُ سُ لَهُ لَهُتَّقُونَ سُ سُ لَهُ لَهُ سُ وَيُ وَيُطَ وَيُطَ وَيُطَ وَيُطَ وَيُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَ وَبِ وَبِعع وَبِع وَبِع وَبِ
+[NeMo I 2026-02-12 00:59:11 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:11 wer:337] WER reference:وَإِذَا الْعِشَارُ عُطِّلَتْ
+[NeMo I 2026-02-12 00:59:11 wer:338] WER predicted:سُ سُ لَهُ لَهُ سُ سُ لَهُ لَهُ لَهُتَّقُونَعْعْقُرْتَّقُونَقُرْتَّقُونَقُرْتَّقُونَقُرْتَّقُونَر وَبِ وَبِ وَبِ وَبِ وَبِ سَ وَبِ وَبِ وَبِر سُ سُ سُ سُ سُ سُ سُ سُ سُنٍنٍنٍنٍتَّقُونَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍتَّقُونَ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِوَّ وَبِ وَبِ وَبِ وَبِ وَبِوَّ وَبِ وَبِ وَبِقُرْقُرْ وَبِقُرْ وَبِقُرْ وَبِقُرْ وَبِقُرْ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِقُرْقُرْ وَبِقُرْ وَبِطَقُرْ وَبِطَ لَهُنٍ سُنٍ سُنٍ سُنٍ سُنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُطَ لَهُطَطَطَطَطَطَطَطَنٍ إِلاَّ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ قُلُو قُلُو قُلُو سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُعْضضضضضضضضض إِذَا إِذَا إِذَا يَٰ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِطَتَّقُونَتَّقُونَطَطَطَ وَهُوَ وَهُوَوَّ سُطَطَطَ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ وَبِ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُو قُلُونٍنٍسْتَنٍسْتَنٍسْتَنٍسْتَنٍ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُضضضضضضضضضضضضضضضضضضضضوَّ سُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُطَنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍنٍضضضضضضض قُلُو قُلُو قُلُووَّ سُ سُ سُ سُ سُ سُ سُ سُ سُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ سُ سُ سُ سُ سُ سُ سُ سُ سُ سُضضضضضضضضضضسْتَسْتَسْتَ إِلاَّ إِلاَّ قُلُونٍطَنٍطَضضضضضضضضضض لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ لَهُ
+[NeMo W 2026-02-12 00:59:11 ctc_greedy_decoding:279] CTC decoding strategy 'greedy' is slower than 'greedy_batch', which implements the same exact interface. Consider changing your strategy to 'greedy_batch' for a free performance improvement.
+[NeMo I 2026-02-12 00:59:11 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:11 wer:337] WER reference:بَشِيرًا وَنَذِيرًا فَأَعْرَضَ أَكْثَرُهُمْ فَهُمْ لَا يَسْمَعُونَ
+[NeMo I 2026-02-12 00:59:11 wer:338] WER predicted:بَ ثُمَّئِن أَتَئِن آيَا ثُمَّإ ثُمَّبَعَكُ ثُمَّ آيَا ثُمَّكُ إِنَّمَاكُ ثُمَّ تَأْ ثُمَّ آيَا أُوْلَئِكَ إِنَّمَا أُوْلَئِكَ ثُمَّ أُوْلَئِكَ ثُمَّ أُوْلَئِكَ أَتَ ثُمَّبَعَ ثُمَّكُئِن ثُمَّبَعَ ثُمَّكُ ثُمَّ آيَا ثُمَّ أُوْلَئِكَ آيَا ثُمَّ آيَا ثُمَّبَعَ ثُمَّكُئِن ثُمَّبَعَ آيَاتُم أُوْلَئِكَ ثُمَّبَعَئِن آيَا ثُمَّ بِ ثُمَّ آيَا ثُمَّكُبَعَئِن
+[NeMo I 2026-02-12 00:59:15 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:15 wer:337] WER reference:قَالَ أَلَمْ أَقُل لَّكَ إِنَّكَ لَن تَسْتَطِيعَ مَعِي صَبْرًا
+[NeMo I 2026-02-12 00:59:15 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:15 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:15 wer:337] WER reference:قَالَ رَبِّ أَنَّى يَكُونُ لِي غُلَامٌ وَكَانَتِ امْرَأَتِي عَاقِرًا وَقَدْ بَلَغْتُ مِنَ الْكِبَرِ عِتِيًّا
+[NeMo I 2026-02-12 00:59:15 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:15 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:15 wer:337] WER reference:ٱتَّخَذُوٓا۟ أَحْبَارَهُمْ وَرُهْبَٰنَهُمْ أَرْبَابًا مِّن دُونِ ٱللَّهِ وَٱلْمَسِيحَ ٱبْنَ مَرْيَمَ وَمَآ أُمِرُوٓا۟ إِلَّا لِيَعْبُدُوٓا۟ إِلَٰهًا وَٰحِدًا لَّآ إِلَٰهَ إِلَّا هُوَ سُبْحَٰنَهُۥ عَمَّا يُشْرِكُونَ
+[NeMo I 2026-02-12 00:59:15 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:15 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:15 wer:337] WER reference:أَوْ تَقُولَ حِينَ تَرَى ٱلْعَذَابَ لَوْ أَنَّ لِى كَرَّةً فَأَكُونَ مِنَ ٱلْمُحْسِنِينَ
+[NeMo I 2026-02-12 00:59:15 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:15 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:15 wer:337] WER reference:قَالَ أَلَمْ أَقُل لَّكَ إِنَّكَ لَن تَسْتَطِيعَ مَعِي صَبْرًا
+[NeMo I 2026-02-12 00:59:15 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:19 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:19 wer:337] WER reference:وَلَقَدْ آتَيْنَا مُوسَى الْهُدَى وَأَوْرَثْنَا بَنِي إِسْرَائِيلَ الْكِتَابَ
+[NeMo I 2026-02-12 00:59:19 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:19 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:19 wer:337] WER reference:وَلَئِن سَأَلْتَهُمْ لَيَقُولُنَّ إِنَّمَا كُنَّا نَخُوضُ وَنَلْعَبُ قُلْ أَبِٱللَّهِ وَءَايَٰتِهِۦ وَرَسُولِهِۦ كُنتُمْ تَسْتَهْزِءُونَ
+[NeMo I 2026-02-12 00:59:19 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:19 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:19 wer:337] WER reference:لِّلطَّٰغِينَ مَـَٔابًا
+[NeMo I 2026-02-12 00:59:19 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:19 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:19 wer:337] WER reference:قُلِ اللّهُ يُنَجِّيكُم مِّنْهَا وَمِن كُلِّ كَرْبٍ ثُمَّ أَنتُمْ تُشْرِكُونَ
+[NeMo I 2026-02-12 00:59:19 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:19 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:19 wer:337] WER reference:وَلَقَدْ آتَيْنَا مُوسَى الْهُدَى وَأَوْرَثْنَا بَنِي إِسْرَائِيلَ الْكِتَابَ
+[NeMo I 2026-02-12 00:59:19 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:23 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:23 wer:337] WER reference:وَمِن قَبْلِهِ كِتَابُ مُوسَى إِمَامًا وَرَحْمَةً وَهَذَا كِتَابٌ مُّصَدِّقٌ لِّسَانًا عَرَبِيًّا لِّيُنذِرَ الَّذِينَ ظَلَمُوا وَبُشْرَى لِلْمُحْسِنِينَ
+[NeMo I 2026-02-12 00:59:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:23 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:23 wer:337] WER reference:اللَّهُ الَّذِي جَعَلَ لَكُمُ اللَّيْلَ لِتَسْكُنُوا فِيهِ وَالنَّهَارَ مُبْصِرًا إِنَّ اللَّهَ لَذُو فَضْلٍ عَلَى النَّاسِ وَلَكِنَّ أَكْثَرَ النَّاسِ لَا يَشْكُرُونَ
+[NeMo I 2026-02-12 00:59:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:23 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:23 wer:337] WER reference:الَّذِينَ يُقِيمُونَ الصَّلاَةَ وَمِمَّا رَزَقْنَاهُمْ يُنفِقُونَ
+[NeMo I 2026-02-12 00:59:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:23 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:23 wer:337] WER reference:وَمَا ذَرَأَ لَكُمْ فِي الأَرْضِ مُخْتَلِفًا أَلْوَانُهُ إِنَّ فِي ذَلِكَ لآيَةً لِّقَوْمٍ يَذَّكَّرُونَ
+[NeMo I 2026-02-12 00:59:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:23 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:23 wer:337] WER reference:وَمِن قَبْلِهِ كِتَابُ مُوسَى إِمَامًا وَرَحْمَةً وَهَذَا كِتَابٌ مُّصَدِّقٌ لِّسَانًا عَرَبِيًّا لِّيُنذِرَ الَّذِينَ ظَلَمُوا وَبُشْرَى لِلْمُحْسِنِينَ
+[NeMo I 2026-02-12 00:59:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:27 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:27 wer:337] WER reference:الَّذِينَ يُوفُونَ بِعَهْدِ اللّهِ وَلاَ يِنقُضُونَ الْمِيثَاقَ
+[NeMo I 2026-02-12 00:59:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:27 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:27 wer:337] WER reference:وَرُسُلاً قَدْ قَصَصْنَاهُمْ عَلَيْكَ مِن قَبْلُ وَرُسُلاً لَّمْ نَقْصُصْهُمْ عَلَيْكَ وَكَلَّمَ اللّهُ مُوسَى تَكْلِيمًا
+[NeMo I 2026-02-12 00:59:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:27 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:27 wer:337] WER reference:بَلْ تُؤْثِرُونَ ٱلْحَيَوٰةَ ٱلدُّنْيَا
+[NeMo I 2026-02-12 00:59:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:27 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:27 wer:337] WER reference:ٱلَّذِى عَلَّمَ بِٱلْقَلَمِ
+[NeMo I 2026-02-12 00:59:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:27 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:27 wer:337] WER reference:الَّذِينَ يُوفُونَ بِعَهْدِ اللّهِ وَلاَ يِنقُضُونَ الْمِيثَاقَ
+[NeMo I 2026-02-12 00:59:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:30 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:30 wer:337] WER reference:وَمَنْ أَظْلَمُ مِمَّنِ افْتَرَى عَلَى اللّهِ كَذِبًا أَوْ كَذَّبَ بِآيَاتِهِ إِنَّهُ لاَ يُفْلِحُ الظَّالِمُونَ
+[NeMo I 2026-02-12 00:59:30 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:30 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:30 wer:337] WER reference:تَلْفَحُ وُجُوهَهُمُ النَّارُ وَهُمْ فِيهَا كَالِحُونَ
+[NeMo I 2026-02-12 00:59:30 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:30 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:30 wer:337] WER reference:فَأَمَّا مَن أَعْطَى وَاتَّقَى
+[NeMo I 2026-02-12 00:59:30 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:30 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:30 wer:337] WER reference:لَهُ مُلْكُ السَّمَاوَاتِ وَالْأَرْضِ وَإِلَى اللَّهِ تُرْجَعُ الْأُمُورُ
+[NeMo I 2026-02-12 00:59:30 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:31 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:31 wer:337] WER reference:وَمَنْ أَظْلَمُ مِمَّنِ افْتَرَى عَلَى اللّهِ كَذِبًا أَوْ كَذَّبَ بِآيَاتِهِ إِنَّهُ لاَ يُفْلِحُ الظَّالِمُونَ
+[NeMo I 2026-02-12 00:59:31 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:34 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:34 wer:337] WER reference:يَحْسَبُ أَنَّ مَالَهُ أَخْلَدَهُ
+[NeMo I 2026-02-12 00:59:34 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:34 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:34 wer:337] WER reference:كَمَثَلِ ٱلشَّيْطَٰنِ إِذْ قَالَ لِلْإِنسَٰنِ ٱكْفُرْ فَلَمَّا كَفَرَ قَالَ إِنِّى بَرِىٓءٌ مِّنكَ إِنِّىٓ أَخَافُ ٱللَّهَ رَبَّ ٱلْعَٰلَمِينَ
+[NeMo I 2026-02-12 00:59:34 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:34 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:34 wer:337] WER reference:إِلَى فِرْعَوْنَ وَمَلَئِهِ فَاتَّبَعُواْ أَمْرَ فِرْعَوْنَ وَمَا أَمْرُ فِرْعَوْنَ بِرَشِيدٍ
+[NeMo I 2026-02-12 00:59:34 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:34 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:34 wer:337] WER reference:إِنَّ الَّذِينَ آمَنُوا وَعَمِلُوا الصَّالِحَاتِ إِنَّا لَا نُضِيعُ أَجْرَ مَنْ أَحْسَنَ عَمَلًا
+[NeMo I 2026-02-12 00:59:34 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:34 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:34 wer:337] WER reference:يَحْسَبُ أَنَّ مَالَهُ أَخْلَدَهُ
+[NeMo I 2026-02-12 00:59:34 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:38 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:38 wer:337] WER reference:فَلَمَّا جَآءَهُم بِٱلْحَقِّ مِنْ عِندِنَا قَالُوا۟ ٱقْتُلُوٓا۟ أَبْنَآءَ ٱلَّذِينَ ءَامَنُوا۟ مَعَهُۥ وَٱسْتَحْيُوا۟ نِسَآءَهُمْ وَمَا كَيْدُ ٱلْكَٰفِرِينَ إِلَّا فِى ضَلَٰلٍ
+[NeMo I 2026-02-12 00:59:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:38 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:38 wer:337] WER reference:وَالَّذِينَ هُمْ لِأَمَانَاتِهِمْ وَعَهْدِهِمْ رَاعُونَ
+[NeMo I 2026-02-12 00:59:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:38 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:38 wer:337] WER reference:فَتَنَادَوا مُصْبِحِينَ
+[NeMo I 2026-02-12 00:59:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:38 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:38 wer:337] WER reference:ثُمَّ ٱجْتَبَٰهُ رَبُّهُۥ فَتَابَ عَلَيْهِ وَهَدَىٰ
+[NeMo I 2026-02-12 00:59:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:38 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:38 wer:337] WER reference:فَلَمَّا جَآءَهُم بِٱلْحَقِّ مِنْ عِندِنَا قَالُوا۟ ٱقْتُلُوٓا۟ أَبْنَآءَ ٱلَّذِينَ ءَامَنُوا۟ مَعَهُۥ وَٱسْتَحْيُوا۟ نِسَآءَهُمْ وَمَا كَيْدُ ٱلْكَٰفِرِينَ إِلَّا فِى ضَلَٰلٍ
+[NeMo I 2026-02-12 00:59:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:42 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:42 wer:337] WER reference:وَأَدْخَلْنَٰهُ فِى رَحْمَتِنَآ إِنَّهُۥ مِنَ ٱلصَّٰلِحِينَ
+[NeMo I 2026-02-12 00:59:42 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:42 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:42 wer:337] WER reference:عَلَى أَن نُّبَدِّلَ خَيْرًا مِّنْهُمْ وَمَا نَحْنُ بِمَسْبُوقِينَ
+[NeMo I 2026-02-12 00:59:42 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:42 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:42 wer:337] WER reference:وَأَنذِرْهُمْ يَوْمَ ٱلْحَسْرَةِ إِذْ قُضِىَ ٱلْأَمْرُ وَهُمْ فِى غَفْلَةٍ وَهُمْ لَا يُؤْمِنُونَ
+[NeMo I 2026-02-12 00:59:42 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:42 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:42 wer:337] WER reference:وَآخَرُ مِن شَكْلِهِ أَزْوَاجٌ
+[NeMo I 2026-02-12 00:59:42 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:42 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:42 wer:337] WER reference:وَأَدْخَلْنَٰهُ فِى رَحْمَتِنَآ إِنَّهُۥ مِنَ ٱلصَّٰلِحِينَ
+[NeMo I 2026-02-12 00:59:42 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:46 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:46 wer:337] WER reference:وَمِنَ النَّاسِ مَن يُجَادِلُ فِي اللَّهِ بِغَيْرِ عِلْمٍ وَيَتَّبِعُ كُلَّ شَيْطَانٍ مَّرِيدٍ
+[NeMo I 2026-02-12 00:59:46 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:46 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:46 wer:337] WER reference:وَزَرَابِىُّ مَبْثُوثَةٌ
+[NeMo I 2026-02-12 00:59:46 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:46 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:46 wer:337] WER reference:فَأَخَذْنَاهُ وَجُنُودَهُ فَنَبَذْنَاهُمْ فِي الْيَمِّ فَانظُرْ كَيْفَ كَانَ عَاقِبَةُ الظَّالِمِينَ
+[NeMo I 2026-02-12 00:59:46 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:46 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:46 wer:337] WER reference:فَسَتُبْصِرُ وَيُبْصِرُونَ
+[NeMo I 2026-02-12 00:59:46 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:46 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:46 wer:337] WER reference:وَمِنَ النَّاسِ مَن يُجَادِلُ فِي اللَّهِ بِغَيْرِ عِلْمٍ وَيَتَّبِعُ كُلَّ شَيْطَانٍ مَّرِيدٍ
+[NeMo I 2026-02-12 00:59:46 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:49 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:49 wer:337] WER reference:وَهَلْ أَتَىٰكَ نَبَؤُا۟ ٱلْخَصْمِ إِذْ تَسَوَّرُوا۟ ٱلْمِحْرَابَ
+[NeMo I 2026-02-12 00:59:49 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:49 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:49 wer:337] WER reference:وَمَا أَسْأَلُكُمْ عَلَيْهِ مِنْ أَجْرٍ إِنْ أَجْرِيَ إِلَّا عَلَى رَبِّ الْعَالَمِينَ
+[NeMo I 2026-02-12 00:59:49 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:50 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:50 wer:337] WER reference:وَإِنَّهُ لَفِي زُبُرِ الْأَوَّلِينَ
+[NeMo I 2026-02-12 00:59:50 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:50 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:50 wer:337] WER reference:وَجَعَلْنَا نَوْمَكُمْ سُبَاتًا
+[NeMo I 2026-02-12 00:59:50 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:50 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:50 wer:337] WER reference:وَهَلْ أَتَىٰكَ نَبَؤُا۟ ٱلْخَصْمِ إِذْ تَسَوَّرُوا۟ ٱلْمِحْرَابَ
+[NeMo I 2026-02-12 00:59:50 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:53 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:53 wer:337] WER reference:وَأَنْ لَّا تَعْلُوا عَلَى اللَّهِ إِنِّي آتِيكُم بِسُلْطَانٍ مُّبِينٍ
+[NeMo I 2026-02-12 00:59:53 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:53 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:53 wer:337] WER reference:فَافْتَحْ بَيْنِي وَبَيْنَهُمْ فَتْحًا وَنَجِّنِي وَمَن مَّعِي مِنَ الْمُؤْمِنِينَ
+[NeMo I 2026-02-12 00:59:53 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:53 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:53 wer:337] WER reference:إِنَّ فِى ذَٰلِكَ لَءَايَةً وَمَا كَانَ أَكْثَرُهُم مُّؤْمِنِينَ
+[NeMo I 2026-02-12 00:59:53 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:54 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:54 wer:337] WER reference:قُلْ نَعَمْ وَأَنتُمْ دَاخِرُونَ
+[NeMo I 2026-02-12 00:59:54 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:54 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:54 wer:337] WER reference:وَأَنْ لَّا تَعْلُوا عَلَى اللَّهِ إِنِّي آتِيكُم بِسُلْطَانٍ مُّبِينٍ
+[NeMo I 2026-02-12 00:59:54 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:57 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:57 wer:337] WER reference:وَلَقَدْ زَيَّنَّا السَّمَاء الدُّنْيَا بِمَصَابِيحَ وَجَعَلْنَاهَا رُجُومًا لِّلشَّيَاطِينِ وَأَعْتَدْنَا لَهُمْ عَذَابَ السَّعِيرِ
+[NeMo I 2026-02-12 00:59:57 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:57 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:57 wer:337] WER reference:وَعَلَى ٱللَّهِ قَصْدُ ٱلسَّبِيلِ وَمِنْهَا جَآئِرٌ وَلَوْ شَآءَ لَهَدَىٰكُمْ أَجْمَعِينَ
+[NeMo I 2026-02-12 00:59:57 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:57 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:57 wer:337] WER reference:يَا بَنِي إِسْرَائِيلَ اذْكُرُواْ نِعْمَتِيَ الَّتِي أَنْعَمْتُ عَلَيْكُمْ وَأَنِّي فَضَّلْتُكُمْ عَلَى الْعَالَمِينَ
+[NeMo I 2026-02-12 00:59:57 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:57 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:57 wer:337] WER reference:فَأَمَّا مَنْ أُوتِيَ كِتَابَهُ بِيَمِينِهِ فَيَقُولُ هَاؤُمُ اقْرَؤُوا كِتَابِيهْ
+[NeMo I 2026-02-12 00:59:57 wer:338] WER predicted:
+[NeMo I 2026-02-12 00:59:57 wer:336] 
+    
+[NeMo I 2026-02-12 00:59:57 wer:337] WER reference:وَلَقَدْ زَيَّنَّا السَّمَاء الدُّنْيَا بِمَصَابِيحَ وَجَعَلْنَاهَا رُجُومًا لِّلشَّيَاطِينِ وَأَعْتَدْنَا لَهُمْ عَذَابَ السَّعِيرِ
+[NeMo I 2026-02-12 00:59:57 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:01 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:01 wer:337] WER reference:وَجَاء أَهْلُ الْمَدِينَةِ يَسْتَبْشِرُونَ
+[NeMo I 2026-02-12 01:00:01 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:01 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:01 wer:337] WER reference:ذَٰلِكَ وَمَنْ عَاقَبَ بِمِثْلِ مَا عُوقِبَ بِهِۦ ثُمَّ بُغِىَ عَلَيْهِ لَيَنصُرَنَّهُ ٱللَّهُ إِنَّ ٱللَّهَ لَعَفُوٌّ غَفُورٌ
+[NeMo I 2026-02-12 01:00:01 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:01 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:01 wer:337] WER reference:وَيَقُولُ ٱلْإِنسَٰنُ أَءِذَا مَا مِتُّ لَسَوْفَ أُخْرَجُ حَيًّا
+[NeMo I 2026-02-12 01:00:01 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:01 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:01 wer:337] WER reference:ثُمَّ كَلَّا سَوْفَ تَعْلَمُونَ
+[NeMo I 2026-02-12 01:00:01 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:01 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:01 wer:337] WER reference:وَجَاء أَهْلُ الْمَدِينَةِ يَسْتَبْشِرُونَ
+[NeMo I 2026-02-12 01:00:01 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:05 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:05 wer:337] WER reference:أَلَمْ تَرَ أَنَّهُمْ فِى كُلِّ وَادٍ يَهِيمُونَ
+[NeMo I 2026-02-12 01:00:05 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:05 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:05 wer:337] WER reference:وَلاَ يَسْتَطِيعُونَ لَهُمْ نَصْرًا وَلاَ أَنفُسَهُمْ يَنصُرُونَ
+[NeMo I 2026-02-12 01:00:05 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:05 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:05 wer:337] WER reference:وَإِذَا رَأَوْا۟ ءَايَةً يَسْتَسْخِرُونَ
+[NeMo I 2026-02-12 01:00:05 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:05 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:05 wer:337] WER reference:وَإِنَّا لَنَحْنُ الْمُسَبِّحُونَ
+[NeMo I 2026-02-12 01:00:05 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:05 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:05 wer:337] WER reference:أَلَمْ تَرَ أَنَّهُمْ فِى كُلِّ وَادٍ يَهِيمُونَ
+[NeMo I 2026-02-12 01:00:05 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:08 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:08 wer:337] WER reference:إِلَّا مَنْ خَطِفَ الْخَطْفَةَ فَأَتْبَعَهُ شِهَابٌ ثَاقِبٌ
+[NeMo I 2026-02-12 01:00:08 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:08 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:08 wer:337] WER reference:فَأَلْقَاهَا فَإِذَا هِيَ حَيَّةٌ تَسْعَى
+[NeMo I 2026-02-12 01:00:08 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:08 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:08 wer:337] WER reference:وَأَمَّا ثَمُودُ فَهَدَيْنَاهُمْ فَاسْتَحَبُّوا الْعَمَى عَلَى الْهُدَى فَأَخَذَتْهُمْ صَاعِقَةُ الْعَذَابِ الْهُونِ بِمَا كَانُوا يَكْسِبُونَ
+[NeMo I 2026-02-12 01:00:08 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:08 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:08 wer:337] WER reference:فِي سَمُومٍ وَحَمِيمٍ
+[NeMo I 2026-02-12 01:00:08 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:08 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:08 wer:337] WER reference:إِلَّا مَنْ خَطِفَ الْخَطْفَةَ فَأَتْبَعَهُ شِهَابٌ ثَاقِبٌ
+[NeMo I 2026-02-12 01:00:08 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:12 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:12 wer:337] WER reference:إِنَّ هَؤُلاء مُتَبَّرٌ مَّا هُمْ فِيهِ وَبَاطِلٌ مَّا كَانُواْ يَعْمَلُونَ
+[NeMo I 2026-02-12 01:00:12 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:12 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:12 wer:337] WER reference:وَٱلشَّيَٰطِينَ كُلَّ بَنَّآءٍ وَغَوَّاصٍ
+[NeMo I 2026-02-12 01:00:12 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:12 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:12 wer:337] WER reference:فَسَبِّحْ بِٱسْمِ رَبِّكَ ٱلْعَظِيمِ
+[NeMo I 2026-02-12 01:00:12 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:12 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:12 wer:337] WER reference:وَإِنَّ رَبَّكَ لَهُوَ ٱلْعَزِيزُ ٱلرَّحِيمُ
+[NeMo I 2026-02-12 01:00:12 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:12 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:12 wer:337] WER reference:إِنَّ هَؤُلاء مُتَبَّرٌ مَّا هُمْ فِيهِ وَبَاطِلٌ مَّا كَانُواْ يَعْمَلُونَ
+[NeMo I 2026-02-12 01:00:12 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:16 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:16 wer:337] WER reference:زُيِّنَ لِلَّذِينَ كَفَرُوا۟ ٱلْحَيَوٰةُ ٱلدُّنْيَا وَيَسْخَرُونَ مِنَ ٱلَّذِينَ ءَامَنُوا۟ وَٱلَّذِينَ ٱتَّقَوْا۟ فَوْقَهُمْ يَوْمَ ٱلْقِيَٰمَةِ وَٱللَّهُ يَرْزُقُ مَن يَشَآءُ بِغَيْرِ حِسَابٍ
+[NeMo I 2026-02-12 01:00:16 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:16 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:16 wer:337] WER reference:إِنَّكَ لَمِنَ ٱلْمُرْسَلِينَ
+[NeMo I 2026-02-12 01:00:16 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:16 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:16 wer:337] WER reference:أَلَمْ نَجْعَلِ ٱلْأَرْضَ كِفَاتًا
+[NeMo I 2026-02-12 01:00:16 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:16 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:16 wer:337] WER reference:قَالَ هَلْ أَنتُم مُّطَّلِعُونَ
+[NeMo I 2026-02-12 01:00:16 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:16 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:16 wer:337] WER reference:زُيِّنَ لِلَّذِينَ كَفَرُوا۟ ٱلْحَيَوٰةُ ٱلدُّنْيَا وَيَسْخَرُونَ مِنَ ٱلَّذِينَ ءَامَنُوا۟ وَٱلَّذِينَ ٱتَّقَوْا۟ فَوْقَهُمْ يَوْمَ ٱلْقِيَٰمَةِ وَٱللَّهُ يَرْزُقُ مَن يَشَآءُ بِغَيْرِ حِسَابٍ
+[NeMo I 2026-02-12 01:00:16 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:19 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:19 wer:337] WER reference:وَمَن يَفْعَلْ ذَلِكَ عُدْوَانًا وَظُلْمًا فَسَوْفَ نُصْلِيهِ نَارًا وَكَانَ ذَلِكَ عَلَى اللّهِ يَسِيرًا
+[NeMo I 2026-02-12 01:00:19 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:20 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:20 wer:337] WER reference:ذَٰلِكَ بِمَا قَدَّمَتْ أَيْدِيكُمْ وَأَنَّ ٱللَّهَ لَيْسَ بِظَلَّامٍ لِّلْعَبِيدِ
+[NeMo I 2026-02-12 01:00:20 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:20 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:20 wer:337] WER reference:فَالتَّالِيَاتِ ذِكْرًا
+[NeMo I 2026-02-12 01:00:20 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:20 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:20 wer:337] WER reference:فَٱدْخُلُوٓا۟ أَبْوَٰبَ جَهَنَّمَ خَٰلِدِينَ فِيهَا فَلَبِئْسَ مَثْوَى ٱلْمُتَكَبِّرِينَ
+[NeMo I 2026-02-12 01:00:20 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:20 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:20 wer:337] WER reference:وَمَن يَفْعَلْ ذَلِكَ عُدْوَانًا وَظُلْمًا فَسَوْفَ نُصْلِيهِ نَارًا وَكَانَ ذَلِكَ عَلَى اللّهِ يَسِيرًا
+[NeMo I 2026-02-12 01:00:20 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:23 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:23 wer:337] WER reference:وَأَنتُمْ حِينَئِذٍ تَنظُرُونَ
+[NeMo I 2026-02-12 01:00:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:23 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:23 wer:337] WER reference:قَالُواْ لَقَدْ عَلِمْتَ مَا لَنَا فِي بَنَاتِكَ مِنْ حَقٍّ وَإِنَّكَ لَتَعْلَمُ مَا نُرِيدُ
+[NeMo I 2026-02-12 01:00:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:23 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:23 wer:337] WER reference:وَجَنَّاتٍ وَعُيُونٍ
+[NeMo I 2026-02-12 01:00:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:23 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:23 wer:337] WER reference:فَبِأَىِّ ءَالَآءِ رَبِّكُمَا تُكَذِّبَانِ
+[NeMo I 2026-02-12 01:00:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:23 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:23 wer:337] WER reference:وَأَنتُمْ حِينَئِذٍ تَنظُرُونَ
+[NeMo I 2026-02-12 01:00:23 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:27 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:27 wer:337] WER reference:مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَى
+[NeMo I 2026-02-12 01:00:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:27 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:27 wer:337] WER reference:مَّنَّاعٍ لِّلْخَيْرِ مُعْتَدٍ مُّرِيبٍ
+[NeMo I 2026-02-12 01:00:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:27 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:27 wer:337] WER reference:عَبَسَ وَتَوَلَّىٰٓ
+[NeMo I 2026-02-12 01:00:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:27 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:27 wer:337] WER reference:أَفَبِعَذَابِنَا يَسْتَعْجِلُونَ
+[NeMo I 2026-02-12 01:00:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:27 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:27 wer:337] WER reference:مَا وَدَّعَكَ رَبُّكَ وَمَا قَلَى
+[NeMo I 2026-02-12 01:00:27 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:31 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:31 wer:337] WER reference:وَأَنَّهُ لَمَّا قَامَ عَبْدُ اللَّهِ يَدْعُوهُ كَادُوا يَكُونُونَ عَلَيْهِ لِبَدًا
+[NeMo I 2026-02-12 01:00:31 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:31 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:31 wer:337] WER reference:ثُمَّ لَتُسْأَلُنَّ يَوْمَئِذٍ عَنِ النَّعِيمِ
+[NeMo I 2026-02-12 01:00:31 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:31 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:31 wer:337] WER reference:يَقُولُ أَهْلَكْتُ مَالًا لُّبَدًا
+[NeMo I 2026-02-12 01:00:31 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:31 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:31 wer:337] WER reference:وَإِنَّ لَكُمْ فِي الأَنْعَامِ لَعِبْرَةً نُّسْقِيكُم مِّمَّا فِي بُطُونِهِ مِن بَيْنِ فَرْثٍ وَدَمٍ لَّبَنًا خَالِصًا سَآئِغًا لِلشَّارِبِينَ
+[NeMo I 2026-02-12 01:00:31 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:31 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:31 wer:337] WER reference:وَأَنَّهُ لَمَّا قَامَ عَبْدُ اللَّهِ يَدْعُوهُ كَادُوا يَكُونُونَ عَلَيْهِ لِبَدًا
+[NeMo I 2026-02-12 01:00:31 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:34 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:34 wer:337] WER reference:وَإِذَآ أَنْعَمْنَا عَلَى الإِنسَانِ أَعْرَضَ وَنَأَى بِجَانِبِهِ وَإِذَا مَسَّهُ الشَّرُّ كَانَ يَؤُوسًا
+[NeMo I 2026-02-12 01:00:34 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:35 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:35 wer:337] WER reference:قَالُواْ نُرِيدُ أَن نَّأْكُلَ مِنْهَا وَتَطْمَئِنَّ قُلُوبُنَا وَنَعْلَمَ أَن قَدْ صَدَقْتَنَا وَنَكُونَ عَلَيْهَا مِنَ الشَّاهِدِينَ
+[NeMo I 2026-02-12 01:00:35 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:35 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:35 wer:337] WER reference:جَزَآءً وِفَاقًا
+[NeMo I 2026-02-12 01:00:35 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:35 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:35 wer:337] WER reference:أَلَمْ نَخْلُقكُّم مِّن مَّآءٍ مَّهِينٍ
+[NeMo I 2026-02-12 01:00:35 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:35 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:35 wer:337] WER reference:وَإِذَآ أَنْعَمْنَا عَلَى الإِنسَانِ أَعْرَضَ وَنَأَى بِجَانِبِهِ وَإِذَا مَسَّهُ الشَّرُّ كَانَ يَؤُوسًا
+[NeMo I 2026-02-12 01:00:35 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:38 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:38 wer:337] WER reference:فَهُوَ فِي عِيشَةٍ رَّاضِيَةٍ
+[NeMo I 2026-02-12 01:00:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:38 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:38 wer:337] WER reference:أَلَا يَظُنُّ أُو۟لَٰٓئِكَ أَنَّهُم مَّبْعُوثُونَ
+[NeMo I 2026-02-12 01:00:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:38 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:38 wer:337] WER reference:يُوفُونَ بِالنَّذْرِ وَيَخَافُونَ يَوْمًا كَانَ شَرُّهُ مُسْتَطِيرًا
+[NeMo I 2026-02-12 01:00:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:38 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:38 wer:337] WER reference:وَقَالَ الَّذِينَ كَفَرُوا لَا تَسْمَعُوا لِهَذَا الْقُرْآنِ وَالْغَوْا فِيهِ لَعَلَّكُمْ تَغْلِبُونَ
+[NeMo I 2026-02-12 01:00:38 wer:338] WER predicted:
+[NeMo I 2026-02-12 01:00:38 wer:336] 
+    
+[NeMo I 2026-02-12 01:00:38 wer:337] WER reference:فَهُوَ فِي عِيشَةٍ رَّاضِيَةٍ
+[NeMo I 2026-02-12 01:00:38 wer:338] WER predicted:

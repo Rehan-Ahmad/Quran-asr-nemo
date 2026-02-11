@@ -1,0 +1,21 @@
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0,1]
+
+  | Name              | Type                              | Params | Mode 
+--------------------------------------------------------------------------------
+0 | preprocessor      | AudioToMelSpectrogramPreprocessor | 0      | train
+1 | encoder           | ConformerEncoder                  | 108 M  | train
+2 | decoder           | RNNTDecoder                       | 3.9 M  | train
+3 | joint             | RNNTJoint                         | 1.4 M  | train
+4 | loss              | RNNTLoss                          | 0      | train
+5 | spec_augmentation | SpectrogramAugmentation           | 0      | train
+6 | wer               | WER                               | 0      | train
+7 | ctc_decoder       | ConvASRDecoder                    | 525 K  | train
+8 | ctc_loss          | CTCLoss                           | 0      | train
+9 | ctc_wer           | WER                               | 0      | train
+--------------------------------------------------------------------------------
+114 M     Trainable params
+0         Non-trainable params
+114 M     Total params
+459.010   Total estimated model params size (MB)
+515       Modules in train mode
+0         Modules in eval mode

@@ -1,0 +1,16 @@
+[NeMo W 2026-02-12 00:59:01 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 4 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:01 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 4 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:03 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 1 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:03 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 4 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:03 nemo_logging:361] /home/adnan/anaconda3/envs/quranASR/lib/python3.10/site-packages/numba_cuda/numba/cuda/dispatcher.py:685: NumbaPerformanceWarning: [1mGrid size 1 will likely result in GPU under-utilization due to low occupancy.[0m
+      warn(NumbaPerformanceWarning(msg))
+    
+[NeMo W 2026-02-12 00:59:11 ctc_greedy_decoding:279] CTC decoding strategy 'greedy' is slower than 'greedy_batch', which implements the same exact interface. Consider changing your strategy to 'greedy_batch' for a free performance improvement.
