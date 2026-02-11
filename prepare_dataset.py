@@ -7,7 +7,7 @@ from pathlib import Path
 import librosa
 import numpy as np
 import soundfile as sf
-from datasets import Audio, load_dataset
+from datasets import load_dataset
 from tqdm import tqdm
 
 # Set HuggingFace cache to local directory if not already set
@@ -125,18 +125,44 @@ def prepare_split(
             sr = None
 
             try:
-                if isinstance(audio_info, dict):
-                    if "array" in audio_info and "sampling_rate" in audio_info:
-                        audio_array = np.array(audio_info["array"], dtype=np.float32)
-                        sr = audio_info["sampling_rate"]
-                    elif "path" in audio_info:
-                        audio_array, sr = sf.read(audio_info["path"])
-                    else:
-                        logger.warning(f"Skipping sample {idx}: unsupported audio dict format")
-                        skipped_count += 1
-                        continue
+                # Handle AudioDecoder from torchcodec (datasets library)
+                if hasattr(audio_info, 'get_all_samples'):
+                    # It's an AudioDecoder - decode it
+                    samples = audio_info.get_all_samples()
+                    metadata = audio_info.metadata
+                    
+                    # Extract tensor and convert to numpy
+                    tensor_data = samples.data
+                    audio_array = tensor_data.cpu().numpy() if hasattr(tensor_data, 'cpu') else np.array(tensor_data)
+                    
+                    # Squeeze mono (shape [1, N] -> [N])
+                    if audio_array.ndim == 2 and audio_array.shape[0] == 1:
+                        audio_array = audio_array.squeeze(0)
+                    elif audio_array.ndim == 2:
+                        # Multi-channel, take first channel
+                        audio_array = audio_array[0]
+                    
+                    # Ensure float32
+                    audio_array = audio_array.astype(np.float32)
+                    sr = metadata.sample_rate
+                    
+                elif isinstance(audio_info, dict) and "array" in audio_info:
+                    # Dictionary format with pre-decoded array
+                    audio_array = np.array(audio_info["array"], dtype=np.float32)
+                    sr = audio_info.get("sampling_rate", TARGET_SR)
+                    
+                elif isinstance(audio_info, dict) and "path" in audio_info:
+                    # Dictionary format with file path
+                    audio_array, sr = sf.read(audio_info["path"])
+                    audio_array = audio_array.astype(np.float32)
+                    
                 else:
-                    logger.warning(f"Skipping sample {idx}: unexpected audio type {type(audio_info)}")
+                    logger.warning(f"Skipping sample {idx}: unsupported audio format {type(audio_info)}")
+                    skipped_count += 1
+                    continue
+
+                if audio_array is None:
+                    logger.warning(f"Skipping sample {idx}: failed to load audio")
                     skipped_count += 1
                     continue
 
@@ -149,7 +175,12 @@ def prepare_split(
                     audio_path = audio_dir / f"{idx:06d}.wav"
                     sf.write(str(audio_path), audio_array, TARGET_SR)
                 else:
-                    audio_path = Path(audio_info.get("path", f"{idx:06d}.wav"))
+                    # Use original path if not copying
+                    if isinstance(audio_info, dict) and "path" in audio_info:
+                        audio_path = Path(audio_info["path"])
+                    else:
+                        audio_path = audio_dir / f"{idx:06d}.wav"
+                        sf.write(str(audio_path), audio_array, TARGET_SR)
 
                 # Compute duration
                 duration = len(audio_array) / TARGET_SR
@@ -187,12 +218,7 @@ def main() -> None:
     ensure_dirs(output_dir)
 
     logger.info(f"Loading dataset: {args.dataset_name}")
-    dataset = load_dataset(args.dataset_name, trust_remote_code=True)
-
-    # Cast audio column if present
-    if args.audio_column in dataset["train"].features:
-        logger.info(f"Casting {args.audio_column} to Audio")
-        dataset = dataset.cast_column(args.audio_column, Audio())
+    dataset = load_dataset(args.dataset_name)
 
     # Resolve splits
     splits = resolve_splits(dataset, args.val_ratio, args.test_ratio, args.seed, args.num_samples)
