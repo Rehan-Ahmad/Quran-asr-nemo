@@ -17,13 +17,14 @@
 - ✅ Special tokens: `<s>` (BOS), `</s>` (EOS)
 - ✅ Character coverage: 99.95% (optimized for Arabic)
 
+**Script**: `nemo_scripts/process_asr_text_tokenizer.py`
 **Location**: `tokenizer/tokenizer_spe_bpe_v1024_bos_eos/`
 
 ### 3. **Model Configuration**
 - ✅ Using FastConformer Hybrid (RNNT-CTC) architecture
 - ✅ 114M parameters, streaming-capable
-- ✅ Batch size: 8 (optimized for memory)
-- ✅ Multi-worker DataLoader disabled for stability
+- ✅ Batch size: 16 (2 GPUs)
+- ✅ DataLoader workers: 8
 
 **Config**: `nemo_scripts/fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml`
 
