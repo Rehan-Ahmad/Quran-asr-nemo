@@ -2,6 +2,8 @@
 data/
 .nemo_cache/
 nemo_experiments/
+lightning_logs/
+training_plots/
 
 # Python
 __pycache__/
