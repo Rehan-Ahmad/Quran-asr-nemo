@@ -16,6 +16,25 @@ CONFIG_NAME="fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml"
 # Comment out to train from scratch (not recommended - takes 200+ epochs)
 PRETRAINED_MODEL="stt_en_fastconformer_transducer_large"
 
+# Download pretrained model if needed
+if [ -n "${PRETRAINED_MODEL:-}" ]; then
+  PRETRAINED_PATH="./pretrained_models/${PRETRAINED_MODEL}.nemo"
+  if [ ! -f "$PRETRAINED_PATH" ]; then
+    echo "Downloading pretrained model: $PRETRAINED_MODEL"
+    mkdir -p pretrained_models
+    conda run -n quranASR python -c "
+from nemo.collections.asr.models import EncDecRNNTBPEModel
+import os
+model = EncDecRNNTBPEModel.from_pretrained('${PRETRAINED_MODEL}')
+os.makedirs('pretrained_models', exist_ok=True)
+model.save_to('${PRETRAINED_PATH}')
+print('Pretrained model downloaded to: ${PRETRAINED_PATH}')
+"
+  else
+    echo "Using cached pretrained model: $PRETRAINED_PATH"
+  fi
+fi
+
 echo "========================================="
 echo "OPTIMIZED TRAINING CONFIGURATION"
 echo "========================================="
@@ -39,7 +58,7 @@ python "$SCRIPT_PATH" \
   model.test_ds.manifest_filepath="$DATA_DIR/manifests/test.json" \
   \
   `# ========== PRETRAINED INITIALIZATION (Transfer Learning) ========== ` \
-  ${PRETRAINED_MODEL:++init_from_nemo_model="$PRETRAINED_MODEL"} \
+  ${PRETRAINED_PATH:++init_from_pretrained_model="$PRETRAINED_PATH"} \
   \
   `# ========== DATA LOADING OPTIMIZED ========== ` \
   model.train_ds.num_workers=8 \
