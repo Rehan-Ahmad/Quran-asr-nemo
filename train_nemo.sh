@@ -19,6 +19,7 @@ python "$SCRIPT_PATH" \
   model.train_ds.batch_size=8 \
   model.validation_ds.batch_size=8 \
   model.test_ds.batch_size=8 \
+  model.decoding.rnnt_use_cuda_graphs=false \
   model.tokenizer.dir="$TOKENIZER_DIR" \
   model.tokenizer.type="bpe" \
   trainer.devices=2 \
