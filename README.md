@@ -76,6 +76,7 @@ quranNemoASR/
 ├── nemo_scripts/                # NeMo official scripts (downloaded from GitHub)
 │   ├── speech_to_text_hybrid_rnnt_ctc_bpe.py
 │   └── fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml
+│   └── process_asr_text_tokenizer.py
 └── data/                        # Dataset (created during preparation)
     ├── manifests/               # Train/val/test JSON manifests
     ├── audio/                   # 16 kHz mono WAV files
