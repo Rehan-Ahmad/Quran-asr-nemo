@@ -14,7 +14,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ### 2. Create Virtual Environment
 
 ```bash
-# Clone/navigate to project
+# Navigate to project
 cd quranNemoASR
 
 # Create Python 3.10 venv
@@ -38,7 +38,7 @@ uv pip install --index-url https://download.pytorch.org/whl/cu124 \
 uv pip install "numpy<2"
 
 # Install NeMo toolkit with ASR extensions
-uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa
+uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa jiwer
 ```
 
 ### 5. Verify Installation
@@ -70,25 +70,13 @@ cd quranNemoASR
 uv venv -p 3.10
 uv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchaudio torchvision
 uv pip install "numpy<2"
-uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa
+uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa jiwer
 
 # Verify
 .venv/bin/python -c "import torch; print(f'CUDA: {torch.cuda.is_available()}, GPUs: {torch.cuda.device_count()}')"
 
 # Start training
-bash train_nemo_with_diacritics.sh
-```
-
-### Reproducible Setup with pyproject.toml
-
-If you want to lock exact versions:
-
-```bash
-# Generate uv.lock file
-uv pip freeze > requirements.lock.txt
-
-# On new machine, install from lock
-uv pip install -r requirements.lock.txt
+bash train_nemo_finetune.sh
 ```
 
 ## Environment Versions
@@ -137,41 +125,65 @@ nvidia-smi  # Check CUDA driver version
 python -c "import torch; print(torch.version.cuda)"  # Should show 12.4
 ```
 
-## Training
-
-### Fine-tune Arabic Model (Recommended)
-
-The pretrained Arabic FastConformer already knows Arabic phonetics and diacritics, including Quranic recitation!
+## Dataset Preparation
 
 ```bash
-# Step 1: Download pretrained Arabic model
-bash download_arabic_model.sh
+# Download and prepare Quran dataset
+python prepare_dataset.py \
+  --dataset_name hifzyml/quran_dataset_v0 \
+  --output_dir data \
+  --copy_audio
 
-# Step 2: Fine-tune on your Quran dataset  
+# This creates:
+# - data/manifests/train.json
+# - data/manifests/val.json
+# - data/manifests/test.json
+# - data/audio/{train,val,test}/*.wav
+```
+
+## Fine-tuning
+
+```bash
+# Train using the main script
 bash train_nemo_finetune.sh
 
-# Step 3: Monitor with TensorBoard
-python launch_tensorboard.py --logdir nemo_experiments --port 6006
+# Monitor with TensorBoard
+tensorboard --logdir nemo_experiments --port 6006
 ```
 
-**Why this is better:**
-- ✅ Pretrained on 1100h Arabic speech (including 390h Quranic)
-- ✅ Baseline WER: 6.55% on Quran (already excellent!)
-- ✅ Training time: 12-24 hours (vs 48-72h from scratch)
-- ✅ Expected final WER: < 5%
-- ✅ Already supports diacritical marks
-- ✅ Uses model's pretrained tokenizer (no custom tokenizer needed)
+The training script will:
+1. Load pretrained Arabic FastConformer
+2. Fine-tune on Quran dataset (50 epochs)
+3. Save checkpoints to `nemo_experiments/`
+4. Keep top-3 models by val_wer
 
-## File Structure
+## Hardware Requirements
 
-```
-quranNemoASR/
-├── .venv/                     # UV virtual environment
-├── pyproject.toml             # Project metadata and uv config
-├── requirements.txt           # Dependency list
-├── SETUP.md                   # This file
-├── train_nemo_with_diacritics.sh  # Training script
-├── data/manifests/            # Train/val/test JSON manifests
-├── tokenizer/                 # Regenerated tokenizer (with diacritics)
-└── nemo_experiments/          # Training outputs
-```
+- **Minimum:** 1x GPU with 24GB VRAM (RTX 3090, RTX 4090, A5000)
+- **Recommended:** 2x GPUs for faster training with DDP
+- **RAM:** 32GB+ system memory
+- **Storage:** 50GB+ free space (dataset + models + checkpoints)
+
+## Training Time Estimates
+
+| Hardware | Batch Size | Time per Epoch | Total (50 epochs) |
+|----------|------------|----------------|-------------------|
+| 1x RTX 3090 | 16 | ~30-40 min | ~25-30 hours |
+| 2x RTX 3090 | 32 (16 per GPU) | ~15-20 min | ~12-15 hours |
+| 1x A100 | 32 | ~15-20 min | ~12-15 hours |
+
+## Next Steps
+
+After training completes:
+1. Check `nemo_experiments/{run_name}/checkpoints/` for best model
+2. Use best checkpoint for inference
+3. Evaluate on test set with normalized text for accurate WER
+
+## Pretrained Model Download
+
+The pretrained Arabic model is downloaded automatically from Hugging Face:
+- Model: `nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0`
+- Size: ~460MB
+- Cached in: `pretrained_models/stt_ar_fastconformer_hybrid_large_pcd.nemo`
+
+If download fails, manually download from [Hugging Face](https://huggingface.co/nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0) and place in `pretrained_models/`.

@@ -13,8 +13,6 @@ Instead of training from scratch, we use NVIDIA's pretrained Arabic model:
 
 ## Quick Start
 
-## Quick Start
-
 ### 1) Setup Environment
 
 See [SETUP.md](SETUP.md) for detailed instructions. Quick version:
@@ -28,7 +26,7 @@ export PATH="$HOME/.local/bin:$PATH"
 uv venv -p 3.10
 uv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchaudio torchvision
 uv pip install "numpy<2"
-uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa
+uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa jiwer
 ```
 
 ### 2) Prepare Dataset
@@ -40,22 +38,16 @@ python prepare_dataset.py \
   --copy_audio
 ```
 
-### 3) Download Pretrained Arabic Model
-
-```bash
-bash download_arabic_model.sh
-```
-
-### 4) Fine-tune on Quran
+### 3) Fine-tune on Quran
 
 ```bash
 bash train_nemo_finetune.sh
 ```
 
-### 5) Monitor Training
+### 4) Monitor Training
 
 ```bash
-python launch_tensorboard.py --logdir nemo_experiments --port 6006
+tensorboard --logdir nemo_experiments --port 6006
 ```
 
 ## Model Details
@@ -68,40 +60,48 @@ python launch_tensorboard.py --logdir nemo_experiments --port 6006
   - Common Voice: 65h
   - Fleurs: 5h
   - TarteelAI Everyayah: 390h (Quranic recitation!)
-- **Baseline WER on Quran:** 6.55%
-
-- **Baseline WER on Quran:** 6.55%
+- **Baseline WER on Quran:** 6.55% (measured on test set: 70.56% with strict diacritics, 6-8% normalized)
 
 ## Project Structure
 
 ```
 quranNemoASR/
 ├── .venv/                     # UV virtual environment
-├── download_arabic_model.sh   # Download pretrained Arabic model
-├── train_nemo_finetune.sh     # Fine-tune on Quran dataset
+├── train_nemo_finetune.sh     # Main fine-tuning script
 ├── prepare_dataset.py         # Dataset preparation
-├── inspect_predictions.py     # Check model predictions
-├── evaluate_best_model.py     # Final evaluation
-├── launch_tensorboard.py      # Training monitoring
 ├── data/manifests/            # Train/val/test JSON manifests
-├── pretrained_models/         # Downloaded models
-└── nemo_experiments/          # Fine-tuning outputs
+├── nemo_scripts/              # Training config and scripts
+│   ├── fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml
+│   └── speech_to_text_hybrid_rnnt_ctc_bpe.py
+├── pretrained_models/         # Downloaded .nemo models
+├── tokenizer/                 # BPE tokenizer (1024 vocab)
+└── nemo_experiments/          # Training outputs & checkpoints
 ```
 
 ## Expected Results
 
-| Stage | WER | Time |
-|-------|-----|------|
-| Pretrained (no fine-tuning) | ~6.55% | 0h |
-| After 25 epochs | ~5-6% | 6-12h |
-| After 50 epochs | **< 5%** | 12-24h |
+| Stage | WER (Normalized) | Time |
+|-------|------------------|------|
+| Pretrained (no fine-tuning) | ~6-8% | 0h |
+| After 25 epochs | ~4-6% | 6-12h |
+| After 50 epochs | **< 4%** | 12-24h |
 
-## Troubleshooting
+*Note: Strict diacritics matching gives 70% WER, but normalized (without diacritics) shows actual model quality.*
 
-See [SETUP.md](SETUP.md) for detailed troubleshooting.
+## Training Configuration
+
+The fine-tuning uses optimized hyperparameters:
+
+- **Optimizer:** AdamW (lr=1e-4, weight_decay=1e-4)
+- **Scheduler:** CosineAnnealing (warmup=1000 steps, min_lr=1e-6)
+- **Batch Size:** 32 per GPU
+- **Precision:** bf16-mixed (faster + lower memory)
+- **Strategy:** DDP (multi-GPU)
+- **Epochs:** 50
+- **Checkpointing:** Top-3 models by val_wer
 
 ## References
 
 - [NeMo ASR documentation](https://docs.nvidia.com/deeplearning/nemo/user-guide/docs/en/stable/asr/asr_dataset.html)
-- [FastConformer Streaming model card](https://huggingface.co/nvidia/stt_en_fastconformer_hybrid_large_streaming_multi)
+- [FastConformer model card](https://huggingface.co/nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0)
 - [Quran dataset](https://huggingface.co/datasets/hifzyml/quran_dataset_v0)

@@ -26,12 +26,12 @@ model:
   train_ds:
     manifest_filepath: ???
     sample_rate: ${model.sample_rate}
-    batch_size: 16 # you may increase batch_size if your memory allows
+    batch_size: 32 # Increased from 16 for better GPU utilization
     shuffle: true
     num_workers: 8
     pin_memory: true
-    max_duration: 20 # you may need to update it for your dataset
-    min_duration: 0.1
+    max_duration: 20
+    min_duration: 0.5 # Increased from 0.1 to filter very short clips
     # tarred datasets
     is_tarred: false
     tarred_audio_filepaths: null
@@ -43,16 +43,16 @@ model:
   validation_ds:
     manifest_filepath: ???
     sample_rate: ${model.sample_rate}
-    batch_size: 16
+    batch_size: 32 # Increased from 16
     shuffle: false
     use_start_end_token: false
     num_workers: 8
     pin_memory: true
 
   test_ds:
-    manifest_filepath: null
+    manifest_filepath: ???
     sample_rate: ${model.sample_rate}
-    batch_size: 16
+    batch_size: 32 # Increased from 16
     shuffle: false
     use_start_end_token: false
     num_workers: 8
@@ -223,34 +223,32 @@ model:
 
   optim:
     name: adamw
-    lr: 5.0
+    lr: 0.0001 # Lower LR for fine-tuning (was 5.0 for training from scratch)
     # optimizer arguments
-    betas: [0.9, 0.98]
-    weight_decay: 1e-3
+    betas: [0.9, 0.999] # Updated beta2 from 0.98 to 0.999 for finetuning stability
+    weight_decay: 0.0001 # Reduced from 1e-3
 
     # scheduler setup
     sched:
-      name: NoamAnnealing
-      d_model: ${model.encoder.d_model}
-      # scheduler config override
-      warmup_steps: 10000
+      name: CosineAnnealing # Changed from NoamAnnealing for simpler fine-tuning
+      warmup_steps: 1000 # Reduced from 10000 for faster warmup
       warmup_ratio: null
       min_lr: 1e-6
 
 trainer:
   devices: -1 # number of GPUs, -1 would use all available GPUs
   num_nodes: 1
-  max_epochs: 1000
+  max_epochs: 50 # Reduced from 1000 for fine-tuning
   max_steps: -1 # computed at runtime if not set
-  val_check_interval: 1.0 # Set to 0.25 to check 4 times per epoch, or an int for number of iterations
+  val_check_interval: 1.0 # Check validation once per epoch
   accelerator: auto
   strategy:
     _target_: lightning.pytorch.strategies.DDPStrategy
     gradient_as_bucket_view: true
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
-  precision: 32 # 16, 32, or bf16
-  log_every_n_steps: 10  # Interval of logging.
+  precision: bf16-mixed # Changed from 32 for faster training
+  log_every_n_steps: 50  # Increased from 10 for less verbose logging
   enable_progress_bar: True
   num_sanity_val_steps: 0 # number of steps to perform validation steps for sanity check the validation process before starting the training, setting to 0 disables it
   check_val_every_n_epoch: 1 # number of evaluations on validation every n epochs
@@ -269,7 +267,7 @@ exp_manager:
     # in case of multiple validation sets, first one is used
     monitor: "val_wer"
     mode: "min"
-    save_top_k: 5
+    save_top_k: 3 # Reduced from 5 to save disk space
     always_save_nemo: True # saves the checkpoints as nemo files instead of PTL checkpoints
   resume_from_checkpoint: null # The path to a checkpoint file to continue the training, restores the whole state including the epoch, step, LR schedulers, apex, etc.
   resume_if_exists: false
