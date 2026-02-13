@@ -139,12 +139,34 @@ python -c "import torch; print(torch.version.cuda)"  # Should show 12.4
 
 ## Training
 
+### Recommended: Fine-tune Arabic Model (Faster & Better)
+
+The pretrained Arabic FastConformer already knows Arabic phonetics and diacritics, including Quranic recitation. Fine-tuning gives better results in less time!
+
 ```bash
-# Option B: With diacritics (proper Quranic reading)
-bash train_nemo_with_diacritics.sh
+# Step 1: Download pretrained Arabic model
+bash download_arabic_model.sh
+
+# Step 2: Fine-tune on your Quran dataset
+bash train_nemo_finetune.sh
 
 # Monitor with TensorBoard
 python launch_tensorboard.py --logdir nemo_experiments --port 6006
+```
+
+**Why fine-tuning is better:**
+- ✅ Pretrained on 1100h Arabic speech (including 390h Quranic)
+- ✅ Baseline WER: 6.55% on Quran (already excellent!)
+- ✅ Training time: 12-24 hours (vs 48-72h from scratch)
+- ✅ Expected final WER: < 5%
+- ✅ Already supports diacritical marks
+
+### Alternative: Train From Scratch (Slower)
+
+Only use if you need complete control or have very different data:
+
+```bash
+bash train_nemo_with_diacritics.sh
 ```
 
 ## File Structure
