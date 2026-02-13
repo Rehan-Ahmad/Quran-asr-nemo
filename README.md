@@ -1,28 +1,37 @@
 # Quran ASR Fine-tuning with NeMo
 
-Fine-tune NVIDIA's FastConformer Hybrid model on the Quran dataset using the NeMo toolkit.
+Fine-tune NVIDIA's Arabic FastConformer model on the Quran dataset using the NeMo toolkit.
 
-## Setup
+## Why Fine-tuning?
 
-### 1) Install dependencies
+Instead of training from scratch, we use NVIDIA's pretrained Arabic model:
+- ✅ **Already trained on 1100h Arabic speech** (including 390h Quran)
+- ✅ **Baseline WER: 6.55%** on Quranic test set
+- ✅ **Supports diacritical marks** natively
+- ✅ **12-24 hours training** (vs 48-72h from scratch)
+- ✅ **Expected final WER: < 5%**
+
+## Quick Start
+
+## Quick Start
+
+### 1) Setup Environment
+
+See [SETUP.md](SETUP.md) for detailed instructions. Quick version:
 
 ```bash
-pip install -r requirements.txt
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+
+# Create venv and install dependencies
+uv venv -p 3.10
+uv pip install --index-url https://download.pytorch.org/whl/cu124 torch torchaudio torchvision
+uv pip install "numpy<2"
+uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa
 ```
 
-> **Note:** NeMo requires a CUDA-capable GPU. Ensure your environment has `torch` with CUDA support:
-> ```bash
-> conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
-> ```
-
-### 2) Prepare dataset
-
-The `prepare_dataset.py` script:
-- Downloads the Quran dataset from Hugging Face
-- Resamples all audio to **16 kHz mono** (required by the model)
-- Validates and skips invalid samples
-- Splits into train/val/test
-- Outputs NeMo-compliant JSONL manifests
+### 2) Prepare Dataset
 
 ```bash
 python prepare_dataset.py \
@@ -31,77 +40,65 @@ python prepare_dataset.py \
   --copy_audio
 ```
 
-**Options:**
-- `--copy_audio`: Copy and resample audio into `data/audio/` (recommended for stable paths)
-- `--num_samples N`: Limit to first N samples (useful for testing)
-- `--val_ratio 0.05`: Validation split ratio
-- `--test_ratio 0.05`: Test split ratio
-
-**Outputs:**
-- `data/manifests/{train,val,test}.json` — NeMo manifests
-- `data/vocab.txt` — Character vocabulary
-- `data/audio/{train,val,test}/` — 16 kHz mono WAV files (if `--copy_audio`)
-
-### 3) Fine-tune
-
-The NeMo training script and config are included in `nemo_scripts/`:
+### 3) Download Pretrained Arabic Model
 
 ```bash
-export DATA_DIR="$PWD/data"
-bash train_nemo.sh
+bash download_arabic_model.sh
 ```
 
-To train on CPU (slow):
+### 4) Fine-tune on Quran
 
 ```bash
-bash train_nemo.sh trainer.devices=1 trainer.accelerator=cpu
+bash train_nemo_finetune.sh
+```
+
+### 5) Monitor Training
+
+```bash
+python launch_tensorboard.py --logdir nemo_experiments --port 6006
 ```
 
 ## Model Details
 
-- **Model:** `stt_en_fastconformer_hybrid_large_streaming_multi` (NVIDIA)
-- **Audio:** 16 kHz mono WAV (resampled automatically)
-- **Training approach:** Hybrid Transducer-CTC
-- **Decoders:** Transducer (RNNT) or CTC (configurable)
+- **Base Model:** `nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0`
+- **Architecture:** FastConformer Hybrid RNNT-CTC (115M params)
+- **Vocab Size:** 1024 (SentencePiece BPE)
+- **Pretrained on:**
+  - MASC: 690h
+  - Common Voice: 65h
+  - Fleurs: 5h
+  - TarteelAI Everyayah: 390h (Quranic recitation!)
+- **Baseline WER on Quran:** 6.55%
+
+- **Baseline WER on Quran:** 6.55%
 
 ## Project Structure
 
 ```
 quranNemoASR/
-├── prepare_dataset.py           # Dataset preparation script
-├── train_nemo.sh                # Training launcher
-├── requirements.txt             # Python dependencies
-├── README.md                    # This file
-├── .gitignore                   # Git ignore rules
-├── nemo_scripts/                # NeMo official scripts (downloaded from GitHub)
-│   ├── speech_to_text_hybrid_rnnt_ctc_bpe.py
-│   └── fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml
-│   └── process_asr_text_tokenizer.py
-└── data/                        # Dataset (created during preparation)
-    ├── manifests/               # Train/val/test JSON manifests
-    ├── audio/                   # 16 kHz mono WAV files
-    └── vocab.txt                # Character vocabulary
+├── .venv/                     # UV virtual environment
+├── download_arabic_model.sh   # Download pretrained Arabic model
+├── train_nemo_finetune.sh     # Fine-tune on Quran dataset
+├── prepare_dataset.py         # Dataset preparation
+├── inspect_predictions.py     # Check model predictions
+├── evaluate_best_model.py     # Final evaluation
+├── launch_tensorboard.py      # Training monitoring
+├── data/manifests/            # Train/val/test JSON manifests
+├── pretrained_models/         # Downloaded models
+└── nemo_experiments/          # Fine-tuning outputs
 ```
+
+## Expected Results
+
+| Stage | WER | Time |
+|-------|-----|------|
+| Pretrained (no fine-tuning) | ~6.55% | 0h |
+| After 25 epochs | ~5-6% | 6-12h |
+| After 50 epochs | **< 5%** | 12-24h |
 
 ## Troubleshooting
 
-### CUDA not available
-```bash
-python -c "import torch; print(torch.cuda.is_available())"
-```
-If `False`, install CUDA-enabled PyTorch:
-```bash
-conda install pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
-```
-
-### Driver/library version mismatch
-Update NVIDIA driver and reboot:
-```bash
-sudo apt update && sudo apt upgrade nvidia-driver-*
-sudo reboot
-```
-
-Then reinstall torch with CUDA.
+See [SETUP.md](SETUP.md) for detailed troubleshooting.
 
 ## References
 

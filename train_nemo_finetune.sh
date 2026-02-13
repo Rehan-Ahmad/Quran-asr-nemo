@@ -7,9 +7,6 @@ set -euo pipefail
 
 DATA_DIR=${DATA_DIR:-$(pwd)/data/manifests}
 PRETRAINED_MODEL=${PRETRAINED_MODEL:-$(pwd)/pretrained_models/stt_ar_fastconformer_hybrid_large_pcd.nemo}
-SCRIPT_PATH=$(pwd)/nemo_scripts/speech_to_text_hybrid_rnnt_ctc_bpe.py
-CONFIG_DIR=$(pwd)/nemo_scripts
-CONFIG_NAME="fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml"
 PYTHON_BIN=$(pwd)/.venv/bin/python
 
 echo "========================================="
@@ -34,33 +31,57 @@ if [ ! -f "$PRETRAINED_MODEL" ]; then
   exit 1
 fi
 
-"$PYTHON_BIN" "$SCRIPT_PATH" \
-  --config-path="$CONFIG_DIR" \
-  --config-name="$CONFIG_NAME" \
-  \
-  model.train_ds.manifest_filepath="$DATA_DIR/train.json" \
-  model.validation_ds.manifest_filepath="$DATA_DIR/val.json" \
-  model.test_ds.manifest_filepath="$DATA_DIR/test.json" \
-  \
-  model.train_ds.num_workers=8 \
-  model.validation_ds.num_workers=8 \
-  model.test_ds.num_workers=8 \
-  \
-  +init_from_pretrained_model="$PRETRAINED_MODEL" \
-  \
-  trainer.max_epochs=50 \
-  trainer.precision=bf16-mixed \
-  trainer.devices=2 \
-  trainer.accelerator=gpu \
-  \
-  model.train_ds.batch_size=32 \
-  \
-  model.optim.lr=0.0001 \
-  model.optim.sched.warmup_steps=1000 \
-  \
-  exp_manager.exp_dir=nemo_experiments \
-  exp_manager.name=FastConformer-Arabic-Quran-Finetuned \
-  exp_manager.checkpoint_callback_params.monitor=val_wer \
-  exp_manager.checkpoint_callback_params.mode=min \
-  exp_manager.checkpoint_callback_params.save_top_k=5 \
-  exp_manager.checkpoint_callback_params.always_save_nemo=true
+"$PYTHON_BIN" << 'FINETUNE'
+import nemo.collections.asr as nemo_asr
+import pytorch_lightning as pl
+from omegaconf import OmegaConf
+
+# Load pretrained Arabic model
+print("Loading pretrained Arabic FastConformer model...")
+model = nemo_asr.models.EncDecHybridRNNTCTCBPEModel.restore_from(
+    "${PRETRAINED_MODEL}"
+)
+
+# Update dataset paths
+model.setup_training_data(train_data_config={
+    'manifest_filepath': '${DATA_DIR}/train.json',
+    'sample_rate': 16000,
+    'batch_size': 32,
+    'shuffle': True,
+    'num_workers': 8,
+})
+
+model.setup_validation_data(val_data_config={
+    'manifest_filepath': '${DATA_DIR}/val.json',
+    'sample_rate': 16000,
+    'batch_size': 32,
+    'shuffle': False,
+    'num_workers': 8,
+})
+
+# Configure optimizer for fine-tuning (lower LR)
+model.cfg.optim.lr = 0.0001
+model.cfg.optim.weight_decay = 0.001
+model.cfg.optim.sched.warmup_steps = 1000
+
+# Setup trainer
+trainer = pl.Trainer(
+    accelerator='gpu',
+    devices=2,
+    strategy='ddp',
+    max_epochs=50,
+    precision='bf16-mixed',
+    log_every_n_steps=50,
+    val_check_interval=0.5,
+    default_root_dir='nemo_experiments/FastConformer-Arabic-Quran-Finetuned',
+)
+
+# Fine-tune
+print("Starting fine-tuning...")
+trainer.fit(model)
+
+# Save fine-tuned model
+output_path = 'nemo_experiments/quran_finetuned_model.nemo'
+model.save_to(output_path)
+print(f"✅ Fine-tuned model saved to: {output_path}")
+FINETUNE
