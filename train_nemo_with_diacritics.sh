@@ -9,9 +9,9 @@ set -euo pipefail
 DATA_DIR=${DATA_DIR:-$(pwd)/data/manifests}
 TOKENIZER_DIR=${TOKENIZER_DIR:-$(pwd)/tokenizer/tokenizer_spe_bpe_v1024_diacritics_bos_eos}
 SCRIPT_PATH=$(pwd)/nemo_scripts/speech_to_text_hybrid_rnnt_ctc_bpe.py
-PYTHON_BIN=$(pwd)/.venv/bin/python
 CONFIG_DIR=$(pwd)/nemo_scripts
 CONFIG_NAME="fastconformer_hybrid_transducer_ctc_bpe_streaming.yaml"
+PYTHON_BIN=$(pwd)/.venv/bin/python
 
 echo "========================================="
 echo "PROPER QURANIC ASR TRAINING"
@@ -44,7 +44,6 @@ echo "========================================="
   trainer.accelerator=gpu \
   \
   model.train_ds.batch_size=32 \
-  model.optim.grad_accumulation_steps=2 \
   \
   model.optim.lr=1.0 \
   model.optim.sched.warmup_steps=3000 \

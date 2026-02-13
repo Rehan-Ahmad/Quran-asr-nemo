@@ -1,5 +1,9 @@
-nemo_toolkit[asr]
-datasets
-soundfile
-tqdm
-librosa
+# Core dependencies
+# Note: Install torch first with CUDA support before installing nemo_toolkit
+# pip install torch torchaudio torchvision --index-url https://download.pytorch.org/whl/cu124
+nemo_toolkit[asr]>=2.6.0
+numpy<2
+datasets>=4.0.0
+soundfile>=0.13.0
+tqdm>=4.67.0
+librosa>=0.11.0

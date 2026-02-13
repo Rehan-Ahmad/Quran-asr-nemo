@@ -1,0 +1,37 @@
+[project]
+name = "quran-nemo-asr"
+version = "0.1.0"
+description = "Quran ASR fine-tuning with NVIDIA NeMo"
+readme = "README.md"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "nemo_toolkit[asr]>=2.6.0",
+    "numpy<2",
+    "datasets>=4.0.0",
+    "soundfile>=0.13.0",
+    "tqdm>=4.67.0",
+    "librosa>=0.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "tensorboard>=2.20.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+# Install torch from PyTorch index with CUDA 12.6
+find-links = ["https://download.pytorch.org/whl/cu126"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+torchaudio = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
