@@ -4,6 +4,8 @@ data/
 nemo_experiments/
 lightning_logs/
 training_plots/
+pretrained_models/
+*.nemo
 
 # Python
 __pycache__/
