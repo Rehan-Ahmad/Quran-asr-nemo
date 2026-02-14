@@ -195,9 +195,38 @@ def evaluate_model(checkpoint_path: str, test_manifest: str, output_file: str = 
 
 def main():
     # Configuration
-    EXPERIMENT_DIR = "nemo_experiments/FastConformer-Hybrid-Transducer-CTC-BPE-Streaming"
+    EXPERIMENTS_ROOT = "nemo_experiments"
     TEST_MANIFEST = "data/manifests/test.json"
     OUTPUT_FILE = "evaluation_results.json"
+    
+    # List available models
+    if not os.path.exists(EXPERIMENTS_ROOT):
+        raise FileNotFoundError(f"Experiments directory not found: {EXPERIMENTS_ROOT}")
+    
+    models = [d for d in os.listdir(EXPERIMENTS_ROOT) 
+              if os.path.isdir(os.path.join(EXPERIMENTS_ROOT, d))]
+    
+    if not models:
+        raise FileNotFoundError(f"No models found in {EXPERIMENTS_ROOT}")
+    
+    print(f"\nAvailable models in {EXPERIMENTS_ROOT}:")
+    for i, model in enumerate(models):
+        print(f"  {i}: {model}")
+    
+    # Get user selection
+    while True:
+        try:
+            selection = int(input(f"\nSelect model (0-{len(models)-1}): "))
+            if 0 <= selection < len(models):
+                break
+            print(f"Invalid selection. Please enter 0-{len(models)-1}")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+    
+    selected_model = models[selection]
+    EXPERIMENT_DIR = os.path.join(EXPERIMENTS_ROOT, selected_model)
+    
+    print(f"\nSelected: {selected_model}")
     
     # Find best checkpoint
     checkpoint_path = find_best_checkpoint(EXPERIMENT_DIR)
