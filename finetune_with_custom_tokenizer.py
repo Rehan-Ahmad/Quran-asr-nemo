@@ -6,6 +6,8 @@ This replaces the pretrained tokenizer with one trained on Quran dataset.
 
 import os
 import torch
+from omegaconf import DictConfig
+from omegaconf.base import ContainerMetadata
 import lightning.pytorch as pl
 from omegaconf import OmegaConf, open_dict
 from nemo.collections.asr.models import ASRModel
@@ -119,6 +121,21 @@ def main(cfg):
     logging.info(f"Fine-tuning with Custom Tokenizer")
     logging.info(f"{'='*70}\n")
     
+    # Allow DictConfig to be unpickled during checkpoint save/load (PyTorch 2.6+)
+    try:
+        torch.serialization.add_safe_globals([DictConfig, ContainerMetadata])
+    except Exception:
+        pass
+
+    # PyTorch 2.6 defaults weights_only=True; NeMo checkpoint callback needs full load.
+    # This assumes checkpoints are trusted (local training artifacts).
+    _torch_load = torch.load
+    def _patched_torch_load(*args, **kwargs):
+        if "weights_only" not in kwargs:
+            kwargs["weights_only"] = False
+        return _torch_load(*args, **kwargs)
+    torch.load = _patched_torch_load
+
     # Validate paths
     if not cfg.init_from_nemo_model or not os.path.exists(cfg.init_from_nemo_model):
         raise FileNotFoundError(f"Pretrained model not found: {cfg.init_from_nemo_model}")
