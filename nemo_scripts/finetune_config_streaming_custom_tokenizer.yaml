@@ -1,0 +1,93 @@
+name: FastConformer-Hybrid-RNNT-CTC-BPE-Custom-Tokenizer
+init_from_nemo_model: null
+model:
+  tokenizer:
+    dir: tokenizer/quran_tokenizer_bpe_v1024
+    type: bpe
+  train_ds:
+    manifest_filepath: null
+    sample_rate: 16000
+    batch_size: 32
+    shuffle: true
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+    trim_silence: false
+    max_duration: 20.0
+    min_duration: 0.5
+    is_tarred: false
+    tarred_audio_filepaths: null
+    shuffle_n: 2048
+    bucketing_strategy: synced_randomized
+    bucketing_batch_size: null
+  validation_ds:
+    manifest_filepath: null
+    sample_rate: 16000
+    batch_size: 32
+    shuffle: false
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+  test_ds:
+    manifest_filepath: null
+    sample_rate: 16000
+    batch_size: 32
+    shuffle: false
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+  optim:
+    name: adamw
+    lr: 0.0001
+    betas:
+    - 0.9
+    - 0.999
+    weight_decay: 0.0001
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 1000
+      warmup_ratio: null
+      min_lr: 1.0e-06
+      last_epoch: -1
+  preprocessor:
+    normalize: NA
+  encoder:
+    causal_downsampling: true
+    att_context_style: chunked_limited
+    att_context_size:
+    - 140
+    - 27
+    conv_context_size: causal
+  compute_eval_loss: false
+trainer:
+  devices: -1
+  accelerator: gpu
+  num_nodes: 1
+  max_epochs: 50
+  max_steps: -1
+  val_check_interval: 1.0
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 50
+  precision: bf16-mixed
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+  strategy: ddp
+  enable_checkpointing: true
+  logger: true
+  enable_progress_bar: true
+  enable_model_summary: true
+exp_manager:
+  exp_dir: null
+  name: null
+  create_tensorboard_logger: true
+  create_checkpoint_callback: true
+  create_wandb_logger: false
+  checkpoint_callback_params:
+    monitor: val_wer
+    mode: min
+    save_top_k: 3
+    always_save_nemo: true
+    save_best_model: true
+    filename: FastConformer-Custom-Tokenizer--{val_wer:.4f}-{epoch}
+  resume_if_exists: false
+  resume_ignore_no_checkpoint: true
