@@ -50,6 +50,37 @@ bash train_nemo_finetune.sh
 tensorboard --logdir nemo_experiments --port 6006
 ```
 
+## RunPod Automation (uv)
+
+This repository includes a fully automated RunPod script that:
+- Creates a uv virtual environment
+- Installs CUDA PyTorch + dependencies
+- Downloads the pretrained .nemo model from Hugging Face
+- Prepares the dataset from Hugging Face
+- Trains a custom tokenizer
+- Fine-tunes the model
+- Evaluates the best checkpoint
+- Optionally starts TensorBoard
+
+### One-command RunPod Start
+
+```bash
+bash runpod_automation.sh
+```
+
+### Optional Environment Overrides
+
+```bash
+export HF_DATASET="hifzyml/quran_dataset_v0"
+export HF_MODEL_REPO="nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0"
+export HF_MODEL_FILENAME="stt_ar_fastconformer_hybrid_large_pcd.nemo"
+export EXP_NAME="FastConformer-Custom-Tokenizer"
+export TB_PORT=6006
+export RUN_TENSORBOARD=1
+# Optional for private repos
+export HF_TOKEN="<your_hf_token>"
+```
+
 ## Model Details
 
 - **Base Model:** `nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0`

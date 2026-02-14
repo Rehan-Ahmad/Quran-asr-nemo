@@ -203,8 +203,9 @@ def main():
     if not os.path.exists(EXPERIMENTS_ROOT):
         raise FileNotFoundError(f"Experiments directory not found: {EXPERIMENTS_ROOT}")
     
-    models = [d for d in os.listdir(EXPERIMENTS_ROOT) 
+    models = [d for d in os.listdir(EXPERIMENTS_ROOT)
               if os.path.isdir(os.path.join(EXPERIMENTS_ROOT, d))]
+    models.sort()
     
     if not models:
         raise FileNotFoundError(f"No models found in {EXPERIMENTS_ROOT}")
@@ -213,17 +214,33 @@ def main():
     for i, model in enumerate(models):
         print(f"  {i}: {model}")
     
-    # Get user selection
-    while True:
-        try:
-            selection = int(input(f"\nSelect model (0-{len(models)-1}): "))
-            if 0 <= selection < len(models):
-                break
-            print(f"Invalid selection. Please enter 0-{len(models)-1}")
-        except ValueError:
-            print("Invalid input. Please enter a number.")
+    # Auto-select via environment variables (for automation)
+    env_model_name = os.getenv("EVAL_MODEL_NAME")
+    env_model_index = os.getenv("EVAL_MODEL_INDEX")
     
-    selected_model = models[selection]
+    if env_model_name:
+        if env_model_name not in models:
+            raise ValueError(f"EVAL_MODEL_NAME not found: {env_model_name}")
+        selected_model = env_model_name
+    elif env_model_index is not None:
+        try:
+            selection = int(env_model_index)
+        except ValueError as exc:
+            raise ValueError("EVAL_MODEL_INDEX must be an integer") from exc
+        if selection < 0 or selection >= len(models):
+            raise ValueError(f"EVAL_MODEL_INDEX out of range: {selection}")
+        selected_model = models[selection]
+    else:
+        # Get user selection
+        while True:
+            try:
+                selection = int(input(f"\nSelect model (0-{len(models)-1}): "))
+                if 0 <= selection < len(models):
+                    break
+                print(f"Invalid selection. Please enter 0-{len(models)-1}")
+            except ValueError:
+                print("Invalid input. Please enter a number.")
+        selected_model = models[selection]
     EXPERIMENT_DIR = os.path.join(EXPERIMENTS_ROOT, selected_model)
     
     print(f"\nSelected: {selected_model}")

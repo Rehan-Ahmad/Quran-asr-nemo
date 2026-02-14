@@ -79,6 +79,27 @@ uv pip install "nemo_toolkit[asr]" datasets soundfile tqdm librosa jiwer
 bash train_nemo_finetune.sh
 ```
 
+## RunPod Automation Script (Recommended)
+
+Use the automated end-to-end script with uv:
+
+```bash
+bash runpod_automation.sh
+```
+
+### Optional Environment Overrides
+
+```bash
+export HF_DATASET="hifzyml/quran_dataset_v0"
+export HF_MODEL_REPO="nvidia/stt_ar_fastconformer_hybrid_large_pcd_v1.0"
+export HF_MODEL_FILENAME="stt_ar_fastconformer_hybrid_large_pcd.nemo"
+export EXP_NAME="FastConformer-Custom-Tokenizer"
+export TB_PORT=6006
+export RUN_TENSORBOARD=1
+# Optional for private repos
+export HF_TOKEN="<your_hf_token>"
+```
+
 ## Environment Versions
 
 | Package | Version | Index |
