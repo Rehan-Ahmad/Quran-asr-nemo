@@ -1,0 +1,111 @@
+# Configuration for fine-tuning with CUSTOM tokenizer
+# Based on finetune_config.yaml but uses custom-trained tokenizer
+
+name: "FastConformer-Hybrid-RNNT-CTC-BPE-Custom-Tokenizer"
+
+# Model will be loaded from pretrained .nemo file
+# Tokenizer will be REPLACED with custom one
+init_from_nemo_model: null  # Set via command line
+
+model:
+  # Tokenizer configuration - CUSTOM TOKENIZER
+  tokenizer:
+    dir: "tokenizer/quran_tokenizer_bpe_v1024"  # Path to custom tokenizer
+    type: "bpe"
+    
+  # Training dataset configuration
+  train_ds:
+    manifest_filepath: null  # Set via command line
+    sample_rate: 16000
+    batch_size: 32
+    shuffle: true
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+    trim_silence: false
+    max_duration: 20.0
+    min_duration: 0.5
+    is_tarred: false
+    tarred_audio_filepaths: null
+    shuffle_n: 2048
+    bucketing_strategy: "synced_randomized"
+    bucketing_batch_size: null
+    
+  # Validation dataset configuration
+  validation_ds:
+    manifest_filepath: null  # Set via command line
+    sample_rate: 16000
+    batch_size: 32
+    shuffle: false
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+    
+  # Test dataset configuration
+  test_ds:
+    manifest_filepath: null  # Set via command line
+    sample_rate: 16000
+    batch_size: 32
+    shuffle: false
+    num_workers: 8
+    pin_memory: true
+    use_start_end_token: false
+  
+  # Optimizer configuration
+  optim:
+    name: adamw
+    lr: 0.0001
+    betas: [0.9, 0.999]
+    weight_decay: 0.0001
+    
+    # Scheduler
+    sched:
+      name: CosineAnnealing
+      warmup_steps: 1000
+      warmup_ratio: null
+      min_lr: 0.000001
+      last_epoch: -1
+
+# Trainer configuration
+trainer:
+  devices: -1  # Use all available GPUs
+  accelerator: gpu
+  num_nodes: 1
+  max_epochs: 50
+  max_steps: -1
+  val_check_interval: 1.0  # Check validation every epoch
+  check_val_every_n_epoch: 1
+  log_every_n_steps: 50
+  precision: bf16-mixed  # Mixed precision training (bf16)
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+  strategy: ddp  # Distributed Data Parallel
+  enable_checkpointing: true
+  logger: true
+  enable_progress_bar: true
+  enable_model_summary: true
+
+# Experiment manager configuration
+exp_manager:
+  exp_dir: null  # Set via command line
+  name: null  # Set via command line
+  create_tensorboard_logger: true
+  create_checkpoint_callback: true
+  create_wandb_logger: false
+  
+  checkpoint_callback_params:
+    monitor: "val_wer"
+    mode: "min"
+    save_top_k: 3
+    always_save_nemo: true
+    save_best_model: true
+    filename: "FastConformer-Custom-Tokenizer--{val_wer:.4f}-{epoch}"
+    
+  # NO early stopping - let it train full 50 epochs
+  # early_stopping_callback_params:
+  #   monitor: "val_wer"
+  #   mode: "min"
+  #   patience: 10
+  
+  resume_if_exists: false
+  resume_ignore_no_checkpoint: true

@@ -7,6 +7,10 @@ training_plots/
 pretrained_models/
 *.nemo
 
+# Tokenizer training artifacts
+tokenizer/quran_text_corpus.txt
+tokenizer/quran_tokenizer_bpe_v1024/
+
 # Python
 __pycache__/
 *.py[cod]
