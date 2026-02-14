@@ -44,3 +44,4 @@ env/
 .DS_Store
 .env
 .hf_cache/
+evaluation_results.json
