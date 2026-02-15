@@ -38,21 +38,37 @@ fi
 echo "✓ All required files found"
 
 echo ""
-echo "Starting streaming fine-tuning..."
-
+echo "Step 1: Converting pretrained model to streaming..."
 echo "-----------------------------------------"
+
+STREAMING_MODEL="pretrained_models/stt_ar_fastconformer_hybrid_large_streaming.nemo"
+
+if [ -f "$STREAMING_MODEL" ]; then
+  echo "✓ Streaming model already exists: $STREAMING_MODEL"
+  echo "  (delete it to regenerate with updated tokenizer)"
+else
+  echo "Creating streaming variant from pretrained model..."
+  "$PYTHON_BIN" convert_model_to_streaming.py \
+    --pretrained-model=pretrained_models/stt_ar_fastconformer_hybrid_large_pcd.nemo \
+    --output-model="$STREAMING_MODEL" \
+    --custom-tokenizer="$TOKENIZER_DIR"
+fi
+
+echo ""
+echo "Step 2: Fine-tuning with streaming config and custom tokenizer..."
+echo "-----------------------------------------"
+
+# Use streaming config file for training with the streaming-enabled model
+# Note: Use +init_from_nemo_model to add it to the config
 "$PYTHON_BIN" finetune_with_custom_tokenizer.py \
-  init_from_nemo_model="$PRETRAINED_MODEL" \
+  --config-path=nemo_scripts \
+  --config-name=fastconformer_hybrid_transducer_ctc_bpe_streaming \
+  '+init_from_nemo_model=pretrained_models/stt_ar_fastconformer_hybrid_large_streaming.nemo' \
   model.tokenizer.dir="$TOKENIZER_DIR" \
-  model.train_ds.manifest_filepath="$DATA_DIR/train.json" \
-  model.validation_ds.manifest_filepath="$DATA_DIR/val.json" \
-  model.test_ds.manifest_filepath="$DATA_DIR/test.json" \
-  model.preprocessor.normalize=NA \
-  model.encoder.causal_downsampling=true \
-  model.encoder.att_context_style=chunked_limited \
-  model.encoder.att_context_size='[140,27]' \
-  model.encoder.conv_context_size=causal \
-  exp_manager.exp_dir="$WORKSPACE_ROOT/nemo_experiments" \
+  model.train_ds.manifest_filepath="data/manifests/train.json" \
+  model.validation_ds.manifest_filepath="data/manifests/val.json" \
+  model.test_ds.manifest_filepath="data/manifests/test.json" \
+  exp_manager.exp_dir="nemo_experiments" \
   exp_manager.name="$EXP_NAME"
 
 echo ""
