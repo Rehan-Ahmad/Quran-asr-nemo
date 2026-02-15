@@ -12,6 +12,10 @@ model:
   tokenizer:
     dir: "tokenizer/quran_tokenizer_bpe_v1024"  # Path to custom tokenizer
     type: "bpe"
+
+  # Preprocessor settings (override as needed for streaming)
+  preprocessor:
+    normalize: "per_feature"
     
   # Training dataset configuration
   train_ds:

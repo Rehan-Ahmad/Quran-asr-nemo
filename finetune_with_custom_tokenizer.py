@@ -81,6 +81,11 @@ def setup_dataloaders(asr_model, cfg):
             asr_model.cfg.validation_ds = config_dict.validation_ds
         if 'test_ds' in config_dict:
             asr_model.cfg.test_ds = config_dict.test_ds
+
+        # Update preprocessor settings if provided
+        if 'preprocessor' in config_dict and 'normalize' in config_dict.preprocessor:
+            if hasattr(asr_model.cfg, 'preprocessor'):
+                asr_model.cfg.preprocessor.normalize = config_dict.preprocessor.normalize
         
         # Ensure tokenizer dir is set (even if None for built-in)
         if asr_model.cfg.tokenizer.dir == "???":

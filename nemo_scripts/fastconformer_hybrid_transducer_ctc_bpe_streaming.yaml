@@ -242,9 +242,7 @@ trainer:
   max_steps: -1 # computed at runtime if not set
   val_check_interval: 1.0 # Check validation once per epoch
   accelerator: auto
-  strategy:
-    _target_: lightning.pytorch.strategies.DDPStrategy
-    gradient_as_bucket_view: true
+  strategy: ddp # Use simple ddp strategy for multi-GPU training
   accumulate_grad_batches: 1
   gradient_clip_val: 1.0
   precision: bf16-mixed # Changed from 32 for faster training
