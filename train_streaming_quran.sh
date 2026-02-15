@@ -15,8 +15,10 @@ echo "Quran ASR Streaming Fine-tuning"
 echo "========================================="
 echo "Pretrained: Arabic FastConformer (115M)"
 echo "Pretrained model path: $PRETRAINED_MODEL"
-echo "Tokenizer: Quran custom BPE"
+echo "Tokenizer: Quran custom BPE (1024 tokens)"
 echo "Streaming: cache-aware (chunked_limited)"
+echo "Attention context: [70, 13] frames"
+echo "Look-ahead latency: ~1040ms (right_ctx × subsampling × stride)"
 echo "========================================="
 
 # Validate paths

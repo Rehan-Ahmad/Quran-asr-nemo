@@ -45,19 +45,30 @@ def convert_model_to_streaming(
         )
         print("✓ Custom tokenizer applied successfully")
     
-    # Define streaming parameters to apply
+    # Define streaming parameters to apply (NeMo-verified)
+    # Ref: https://github.com/NVIDIA-NeMo/NeMo/blob/main/examples/asr/conf/fastconformer/cache_aware_streaming/
     streaming_params = {
         'causal_downsampling': True,
         'att_context_style': 'chunked_limited',
-        'att_context_size': [70, 13],
+        'att_context_size': [70, 13],  # [left_context, right_context] for look-ahead
         'conv_context_size': 'causal'
     }
     
-    print("\nModifying encoder for streaming:")
+    # Calculate look-ahead latency
+    right_context = streaming_params['att_context_size'][1]
+    subsampling_factor = 8  # FastConformer default
+    window_stride_ms = 10   # 10ms per frame
+    lookahead_latency_ms = right_context * subsampling_factor * window_stride_ms
+    
+    print("\nModifying encoder for streaming (NeMo cache-aware):")
     print(f"  - causal_downsampling: {streaming_params['causal_downsampling']}")
     print(f"  - att_context_style: {streaming_params['att_context_style']}")
     print(f"  - att_context_size: {streaming_params['att_context_size']}")
+    print(f"    Left context (cached history): {streaming_params['att_context_size'][0]} frames")
+    print(f"    Right context (look-ahead): {streaming_params['att_context_size'][1]} frames")
     print(f"  - conv_context_size: {streaming_params['conv_context_size']}")
+    print(f"\n  Estimated look-ahead latency: {lookahead_latency_ms}ms")
+    print(f"  Formula: right_context × subsampling × stride = {right_context} × {subsampling_factor} × {window_stride_ms}ms")
     
     # Get model config
     model_cfg = model.cfg
@@ -122,11 +133,72 @@ def convert_model_to_streaming(
     model.save_to(output_model_path)
     print("✓ Model saved successfully")
     
-    # Verify
-    print("\nVerifying saved model...")
-    test_model = nemo_asr.models.ASRModel.restore_from(output_model_path)
-    print(f"✓ Model verification successful")
+    # Verify streaming configuration
+    print("\nVerifying streaming configuration...")
+    verify_streaming_config(output_model_path, lookahead_latency_ms)
     print(f"\n✓✓✓ Streaming model created successfully: {output_model_path}")
+
+
+def verify_streaming_config(model_path: str, expected_latency_ms: int):
+    """
+    Verify that streaming parameters are correctly set in the saved model.
+    
+    Args:
+        model_path: Path to saved .nemo model
+        expected_latency_ms: Expected look-ahead latency in milliseconds
+    """
+    model = nemo_asr.models.ASRModel.restore_from(model_path)
+    enc_cfg = model.cfg.encoder
+    
+    print("\n" + "="*70)
+    print("STREAMING CONFIGURATION VERIFICATION")
+    print("="*70)
+    
+    # Check each parameter
+    checks = {
+        'att_context_style': ('chunked_limited', enc_cfg.get('att_context_style')),
+        'att_context_size': ([70, 13], enc_cfg.get('att_context_size')),
+        'causal_downsampling': (True, enc_cfg.get('causal_downsampling')),
+        'conv_context_size': ('causal', enc_cfg.get('conv_context_size')),
+    }
+    
+    all_pass = True
+    for param, (expected, actual) in checks.items():
+        match = "✓" if actual == expected else "✗"
+        status = "PASS" if actual == expected else "FAIL"
+        print(f"{match} encoder.{param}: {actual} [{status}]")
+        if actual != expected:
+            print(f"    Expected: {expected}")
+            all_pass = False
+    
+    # Verify preprocessor setting
+    preproc_norm = model.cfg.preprocessor.get('normalize', 'default')
+    preproc_pass = preproc_norm == 'NA'
+    print(f"{'✓' if preproc_pass else '✗'} preprocessor.normalize: {preproc_norm} {'[PASS]' if preproc_pass else '[FAIL]'}")
+    if not preproc_pass:
+        print(f"    Expected: NA (streaming-friendly)")
+        all_pass = False
+    
+    # Verify eval loss setting
+    eval_loss = model.cfg.get('compute_eval_loss', True)
+    eval_pass = eval_loss == False
+    print(f"{'✓' if eval_pass else '✗'} compute_eval_loss: {eval_loss} {'[PASS]' if eval_pass else '[FAIL]'}")
+    if not eval_pass:
+        print(f"    Expected: false (avoid OOM on validation)")
+        all_pass = False
+    
+    print(f"\n✓ Look-ahead latency: {expected_latency_ms}ms")
+    print(f"  ⚠️  Note: {expected_latency_ms}ms may be high for real-time applications")
+    print(f"  ⚠️  For lower latency, consider att_context_size=[70, 8] → ~640ms")
+    
+    print("="*70)
+    
+    if all_pass:
+        print("✓ All streaming parameters verified successfully!")
+    else:
+        print("✗ Some parameters do not match expected values.")
+    
+    return all_pass
 
 
 if __name__ == "__main__":
