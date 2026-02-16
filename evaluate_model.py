@@ -64,7 +64,14 @@ def find_best_checkpoint(experiment_dir: str) -> str:
     return str(best_checkpoint)
 
 
-def evaluate_model(checkpoint_path: str, test_manifest: str, output_file: str = None):
+def evaluate_model(
+    checkpoint_path: str, 
+    test_manifest: str, 
+    output_file: str = None,
+    decoder_type: str = None,
+    att_context_size: list = None,
+    auto_detect: bool = True
+):
     """
     Load model from checkpoint and evaluate on test data.
     
@@ -72,12 +79,96 @@ def evaluate_model(checkpoint_path: str, test_manifest: str, output_file: str = 
         checkpoint_path: Path to .nemo checkpoint file
         test_manifest: Path to test manifest JSON file
         output_file: Optional path to save predictions JSON
+        decoder_type: Decoder type for hybrid models ('rnnt' or 'ctc'). If None and auto_detect=True, will be auto-detected
+        att_context_size: Attention context size for streaming models, e.g., [140, 27]. If None and auto_detect=True, will be auto-detected
+        auto_detect: If True, automatically detect streaming vs non-streaming from model config (default: True)
     """
     print(f"Loading model from: {checkpoint_path}")
     
     # Restore model from checkpoint
     asr_model = nemo_asr.models.ASRModel.restore_from(checkpoint_path)
     asr_model.eval()
+    
+    # Auto-detect streaming configuration from model.cfg if not explicitly specified
+    if auto_detect:
+        print(f"\n{'='*70}")
+        print(f"Auto-detecting model configuration from checkpoint...")
+        
+        # Check for streaming encoder configuration
+        has_encoder_cfg = hasattr(asr_model.cfg, 'encoder')
+        is_streaming = False
+        detected_att_context_size = None
+        
+        if has_encoder_cfg:
+            encoder_cfg = asr_model.cfg.encoder
+            # Check if encoder has att_context_size configured
+            if hasattr(encoder_cfg, 'att_context_size') and encoder_cfg.att_context_size:
+                detected_att_context_size = encoder_cfg.att_context_size
+                is_streaming = True
+        
+        # Auto-detect decoder type from model class
+        detected_decoder_type = None
+        model_class_name = type(asr_model).__name__
+        
+        if 'EncDecHybridRNNTCTC' in model_class_name:
+            # For hybrid models, check config for preferred decoder
+            if hasattr(asr_model.cfg, 'decoder') and hasattr(asr_model.cfg.decoder, 'pred_type'):
+                detected_decoder_type = asr_model.cfg.decoder.pred_type
+            else:
+                # Default to RNNT for hybrid models if not specified
+                detected_decoder_type = 'rnnt'
+        elif 'EncDecRNNT' in model_class_name:
+            detected_decoder_type = 'rnnt'
+        elif 'EncDecCTC' in model_class_name:
+            detected_decoder_type = 'ctc'
+        
+        # Use detected values if not explicitly provided
+        if decoder_type is None and detected_decoder_type:
+            decoder_type = detected_decoder_type
+        if att_context_size is None and detected_att_context_size:
+            att_context_size = detected_att_context_size
+        
+        # Print detection results
+        print(f"  Model class: {model_class_name}")
+        print(f"  Streaming: {'Yes' if is_streaming else 'No'}")
+        if detected_decoder_type:
+            print(f"  Decoder type detected: {detected_decoder_type}")
+        if detected_att_context_size:
+            print(f"  Attention context size detected: {detected_att_context_size}")
+        print(f"{'='*70}\n")
+    
+    # Apply decoder type and streaming configuration (CRITICAL FOR HYBRID/STREAMING MODELS)
+    if decoder_type and hasattr(asr_model, 'change_decoding_strategy'):
+        try:
+            from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig
+            from nemo.collections.asr.parts.submodules.ctc_decoding import CTCDecodingConfig
+            
+            print(f"\n{'='*70}")
+            print(f"Applying decoding configuration:")
+            print(f"  decoder_type: {decoder_type}")
+            
+            if decoder_type == 'rnnt':
+                decoding_cfg = RNNTDecodingConfig()
+            elif decoder_type == 'ctc':
+                decoding_cfg = CTCDecodingConfig()
+            else:
+                raise ValueError(f"Unknown decoder_type: {decoder_type}. Must be 'rnnt' or 'ctc'.")
+            
+            asr_model.change_decoding_strategy(decoding_cfg, decoder_type=decoder_type)
+            print(f"  ✓ Decoding strategy changed to {decoder_type.upper()}")
+        except Exception as e:
+            print(f"  Warning: Could not change decoding strategy: {e}")
+    
+    # Apply streaming attention context size if specified
+    if att_context_size and hasattr(asr_model.encoder, 'set_default_att_context_size'):
+        try:
+            print(f"  att_context_size: {att_context_size}")
+            asr_model.encoder.set_default_att_context_size(att_context_size)
+            print(f"  ✓ Applied attention context size for streaming")
+        except Exception as e:
+            print(f"  Warning: Could not set attention context size: {e}")
+    
+    print(f"{'='*70}\n")
     
     print(f"Model architecture: {type(asr_model).__name__}")
     print(f"Vocabulary size: {asr_model.decoder.vocab_size if hasattr(asr_model.decoder, 'vocab_size') else 'N/A'}")
@@ -199,6 +290,15 @@ def main():
     TEST_MANIFEST = "data/manifests/test.json"
     OUTPUT_FILE = "evaluation_results.json"
     
+    # ===== OPTIONAL: Override auto-detection =====
+    # If you want to manually specify decoder type or streaming context,
+    # uncomment the lines below. Otherwise, they will be auto-detected.
+    # DECODER_TYPE = 'rnnt'           # e.g., 'rnnt' or 'ctc'
+    # ATT_CONTEXT_SIZE = [140, 27]    # e.g., [140, 27] or None
+    DECODER_TYPE = None              # None = auto-detect
+    ATT_CONTEXT_SIZE = None          # None = auto-detect
+    # =============================================
+    
     # List available models
     if not os.path.exists(EXPERIMENTS_ROOT):
         raise FileNotFoundError(f"Experiments directory not found: {EXPERIMENTS_ROOT}")
@@ -248,8 +348,18 @@ def main():
     # Find best checkpoint
     checkpoint_path = find_best_checkpoint(EXPERIMENT_DIR)
     
-    # Evaluate
-    evaluate_model(checkpoint_path, TEST_MANIFEST, OUTPUT_FILE)
+    # Evaluate with auto-detection enabled
+    print(f"\n[INFO] Auto-detection enabled: streaming & decoder type will be detected from checkpoint")
+    print()
+    
+    evaluate_model(
+        checkpoint_path, 
+        TEST_MANIFEST, 
+        OUTPUT_FILE,
+        decoder_type=DECODER_TYPE,
+        att_context_size=ATT_CONTEXT_SIZE,
+        auto_detect=True  # Enable auto-detection
+    )
 
 
 if __name__ == "__main__":
