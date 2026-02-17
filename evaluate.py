@@ -281,6 +281,9 @@ def transcribe_manifest(model: ASRModel, cfg: EvaluationConfig, samples: List[di
             else:
                 pred_text = str(predictions[0]) if predictions else ""
             
+        except KeyboardInterrupt:
+            logging.info("Transcription interrupted by user")
+            sys.exit(0)
         except Exception as e:
             logging.warning(f"Failed to transcribe {audio_path}: {e}")
             pred_text = ""
@@ -291,7 +294,9 @@ def transcribe_manifest(model: ASRModel, cfg: EvaluationConfig, samples: List[di
             'pred_text': pred_text
         })
         
-        if (idx + 1) % max(1, len(samples) // 10) == 0:
+        # Progress reporting every 10% of samples
+        progress_interval = max(1, len(samples) // 10)
+        if (idx + 1) % progress_interval == 0 or (idx + 1) == len(samples):
             logging.info(f"  Progress: {idx + 1}/{len(samples)}")
     
     logging.info("Transcription complete")
@@ -334,12 +339,15 @@ def main(cfg: EvaluationConfig) -> EvaluationConfig:
         except Exception as e:
             logging.warning(f"Could not apply tokenizer: {e}")
     
+    # Set model to evaluation mode
+    model.eval()
+    
     # Move to GPU if available
     if cfg.cuda and torch.cuda.is_available():
         model = model.cuda()
         logging.info("✓ Model moved to GPU")
     else:
-        model = model.eval()
+        logging.info("✓ Using CPU for inference")
     
     # Load validation data
     samples = load_manifest(cfg.dataset_manifest)
