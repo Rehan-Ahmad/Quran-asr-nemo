@@ -69,20 +69,26 @@ def main():
     print("\n[3/7] Updating configuration for Quran dataset...")
     
     # Update training dataset config
-    model.cfg.train_ds.manifest_filepath = [str(MANIFEST_DIR / "train.json")]
+    model.cfg.train_ds.manifest_filepath = str(MANIFEST_DIR / "train.json")
     model.cfg.train_ds.is_tarred = False
     model.cfg.train_ds.tarred_audio_filepaths = None
     model.cfg.train_ds.batch_size = BATCH_SIZE_PER_GPU
     model.cfg.train_ds.num_workers = 8
     model.cfg.train_ds.pin_memory = True
     model.cfg.train_ds.max_duration = 30.0
+    model.cfg.train_ds.shuffle_n = 2048  # Shuffle buffer for better randomization
+    model.cfg.train_ds.bucketing_strategy = "synced_randomized"  # Bucket similar lengths
+    
+    # Optimize RNNT fused batch size for better speed
+    if hasattr(model.cfg, 'joint') and hasattr(model.cfg.joint, 'fused_batch_size'):
+        model.cfg.joint.fused_batch_size = 16  # Increase from default 4 for speed
 
     # Update validation dataset config (only fields that exist)
-    model.cfg.validation_ds.manifest_filepath = [str(MANIFEST_DIR / "val.json")]
+    model.cfg.validation_ds.manifest_filepath = str(MANIFEST_DIR / "val.json")
     model.cfg.validation_ds.batch_size = BATCH_SIZE_PER_GPU
-    model.cfg.validation_ds.num_workers = 4
+    model.cfg.validation_ds.num_workers = 8  # Match training workers
 
-    print("✓ Dataset config updated")
+    print("✓ Dataset config updated (with bucketing and optimized fused_batch_size)")
 
     # [4] Setup data loaders using official NeMo method
     print("\n[4/7] Setting up data loaders...")
@@ -117,6 +123,7 @@ def main():
         'devices': num_gpus,
         'strategy': strategy,
         'num_nodes': 1,
+        'precision': 'bf16-mixed',  # Use mixed precision for 2-3x speedup
         'log_every_n_steps': 10,
         'val_check_interval': 1.0,
         'enable_checkpointing': True,
@@ -124,6 +131,7 @@ def main():
         'logger': False,  # exp_manager will create its own logger
     }
     print(f"✓ Configured for {num_gpus} device(s) with effective batch size {effective_batch_size}")
+    print(f"✓ Using bf16 mixed precision for faster training")
     
     print(f"Training strategy: {'DDP (multi-GPU)' if num_gpus > 1 else 'single device'}")
     print(f"Effective batch size: {effective_batch_size} ({BATCH_SIZE_PER_GPU} × {num_gpus})")
