@@ -47,39 +47,48 @@ Outputs: `nemo_experiments/FastConformer-Streaming-Custom-Tokenizer-*/`
 python evaluate.py
 ```
 
-The evaluation script is **interactive**:
-1. Automatically discovers all trained models in `nemo_experiments/`
-2. Shows available models with type (STREAMING 🌊 or STANDARD 📶)
-3. You select which model to evaluate (enter 1, 2, 3, etc.)
-4. You choose how many samples to test (default 20, max 3,745)
-5. System adapts evaluation based on model type
-6. Shows results with accuracy percentage
+The evaluation script uses **NVIDIA NeMo's official evaluation pattern**:
+- **Proper WER/CER Metrics**: Computes word/character error rates correctly
+- **Model Discovery**: Automatically finds all trained `.nemo` checkpoints
+- **Interactive Selection**: Browse and select models with numbered menu
+- **Text Processing**: Handles punctuation, case normalization
+- **Per-sample Analysis**: Detailed results for each sample (saved to JSON)
+- **Streaming Support**: Evaluates streaming models with proper context sizes
 
-Example:
+Example workflow:
 ```
-🎙️  Quran ASR Model Evaluator
+1. Script discovers all models in nemo_experiments/
+2. Shows available models: [STREAMING] or [STANDARD]
+3. You select model by number (1, 2, 3, etc.)
+4. Script transcribes validation samples
+5. Computes WER and CER metrics
+6. Results: evaluation_results.json
+```
 
+Example output:
+```
 ================================================================================
-📦 AVAILABLE MODELS
+Quran ASR Evaluation Script
 ================================================================================
- 1. [📶 STANDARD] FastConformer-Custom-Tokenizer/...nemo
-    Size: 438.5 MB
- 2. [🌊 STREAMING] FastConformer-Streaming-Custom-Tokenizer/...nemo
-    Size: 439.1 MB
-
+✓ Model loaded
+✓ Tokenizer applied
+✓ Model moved to GPU
+Loading manifest from data/manifests/val.json
+Loaded 3745 samples from manifest
+Transcribing 3745 samples...
+  Progress: 375/3745
+  Progress: 750/3745
+  ...
+Transcription complete
+Computing metrics...
 ================================================================================
-Select model (1-2): 1
-
-✓ Selected: FastConformer-Custom-Tokenizer
-✓ Type: STANDARD
-
-How many samples to evaluate? (default 20): 50
-
+EVALUATION RESULTS
 ================================================================================
-📊 EVALUATING (Standard Mode)
+Total samples: 3745
+WER: 0.1542 (15.42%)
+CER: 0.0823 (8.23%)
+Output: evaluation_results.json
 ================================================================================
-
-Results: 45/50 correct (90.0% accuracy)
 ```
 
 ## Configuration
