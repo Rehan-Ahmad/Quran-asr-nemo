@@ -20,7 +20,7 @@ MANIFEST_DIR = Path("/data/SAB_PhD/quranNemoASR/data/manifests")
 LOG_DIR = Path("/data/SAB_PhD/quranNemoASR/nemo_experiments/FastConformer-English-Quran-Tokenizer")
 BATCH_SIZE = 32
 MAX_EPOCHS = 10
-LEARNING_RATE = 0.0003  # 3e-4 - good for fine-tuning with reinitialized decoder
+LEARNING_RATE = 1
 
 def main():
     print("=" * 80)
