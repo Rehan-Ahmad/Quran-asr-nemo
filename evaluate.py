@@ -424,10 +424,21 @@ def main(cfg: EvaluationConfig) -> EvaluationConfig:
         ground_truth_text = pc.rm_punctuation(ground_truth_text)
         predicted_text = pc.rm_punctuation(predicted_text)
     
-    # Compute WER and CER
+    # Compute WER and CER (NeMo may return percentages > 1.0)
     logging.info("Computing metrics...")
-    cer = word_error_rate(hypotheses=predicted_text, references=ground_truth_text, use_cer=True)
-    wer = word_error_rate(hypotheses=predicted_text, references=ground_truth_text, use_cer=False)
+    cer_raw = word_error_rate(hypotheses=predicted_text, references=ground_truth_text, use_cer=True)
+    wer_raw = word_error_rate(hypotheses=predicted_text, references=ground_truth_text, use_cer=False)
+
+    # Normalize to fractional form (0..1). If the returned value is >1,
+    # assume it's a percent (e.g. 74.5) and divide by 100.
+    def _to_frac(x: float) -> float:
+        try:
+            return x / 100.0 if x > 1.0 else x
+        except Exception:
+            return float(x)
+
+    cer = _to_frac(cer_raw)
+    wer = _to_frac(wer_raw)
     
     # Punctuation Error Rate (optional)
     if cfg.use_punct_er:
@@ -454,17 +465,17 @@ def main(cfg: EvaluationConfig) -> EvaluationConfig:
             output_manifest_path=cfg.output_filename,
         )
     
-    # Determine which metric to report
+    # Determine which metric to report (use fractional values for tolerance)
     metric_name = 'CER' if cfg.use_cer else 'WER'
     metric_value = cer if cfg.use_cer else wer
-    
-    # Log results
+
+    # Log results (show percent and fractional forms)
     logging.info("=" * 100)
     logging.info("EVALUATION RESULTS")
     logging.info("=" * 100)
     logging.info(f"Total samples: {len(evaluation_samples)}")
-    logging.info(f"WER: {wer:.4f} ({wer*100:.2f}%)")
-    logging.info(f"CER: {cer:.4f} ({cer*100:.2f}%)")
+    logging.info(f"WER: {wer*100:.2f}% ({wer:.4f} fraction)")
+    logging.info(f"CER: {cer*100:.2f}% ({cer:.4f} fraction)")
     
     if cfg.use_punct_er:
         dper_obj.print()
