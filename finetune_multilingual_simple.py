@@ -2,8 +2,12 @@
 """
 Fine-tune English FastConformer on Quran ASR data with custom Quran tokenizer.
 Follows the official NVIDIA NeMo example: examples/asr/speech_to_text_finetune.py
+
+Hardware-aware: Auto-detects GPUs and scales training (works on 1-8 GPUs).
+Environment variables: BATCH_SIZE_PER_GPU (default: 16), MAX_EPOCHS (default: 10)
 """
 
+import os
 import torch
 torch.set_float32_matmul_precision('medium')
 
@@ -18,13 +22,31 @@ NEMO_MODEL = "/data/SAB_PhD/quranNemoASR/pretrained_models/stt_en_fastconformer_
 TOKENIZER_DIR = Path("/data/SAB_PhD/quranNemoASR/tokenizer/quran_tokenizer_bpe_v1024")
 MANIFEST_DIR = Path("/data/SAB_PhD/quranNemoASR/data/manifests")
 LOG_DIR = Path("/data/SAB_PhD/quranNemoASR/nemo_experiments/FastConformer-English-Quran-Tokenizer")
-BATCH_SIZE = 32
-MAX_EPOCHS = 10
+
+# Hardware-aware configuration (override via environment variables if needed)
+BATCH_SIZE_PER_GPU = int(os.getenv("BATCH_SIZE_PER_GPU", "16"))  # Per-GPU batch (16 for 24GB)
+MAX_EPOCHS = int(os.getenv("MAX_EPOCHS", "10"))
 LEARNING_RATE = 1
 
 def main():
+    # Detect hardware configuration
+    num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    if num_gpus == 0:
+        print("⚠️  No GPUs detected - running on CPU (very slow!)")
+        effective_batch_size = BATCH_SIZE_PER_GPU
+        num_gpus = 1  # For CPU mode
+    else:
+        effective_batch_size = BATCH_SIZE_PER_GPU * num_gpus
+        print(f"✓ Detected {num_gpus} GPU(s)")
+        for i in range(num_gpus):
+            props = torch.cuda.get_device_properties(i)
+            memory_gb = props.total_memory / 1024**3
+            print(f"  GPU {i}: {props.name} ({memory_gb:.1f} GB)")
+    
     print("=" * 80)
     print("FASTCONFORMER FINE-TUNING ON QURAN DATA WITH CUSTOM TOKENIZER")
+    print("=" * 80)
+    print(f"Hardware: {num_gpus} GPU(s), Batch: {BATCH_SIZE_PER_GPU}/GPU (effective: {effective_batch_size})")
     print("=" * 80)
 
     # [1] Load base model from NEMO checkpoint
@@ -50,14 +72,14 @@ def main():
     model.cfg.train_ds.manifest_filepath = [str(MANIFEST_DIR / "train.json")]
     model.cfg.train_ds.is_tarred = False
     model.cfg.train_ds.tarred_audio_filepaths = None
-    model.cfg.train_ds.batch_size = BATCH_SIZE
+    model.cfg.train_ds.batch_size = BATCH_SIZE_PER_GPU
     model.cfg.train_ds.num_workers = 8
     model.cfg.train_ds.pin_memory = True
     model.cfg.train_ds.max_duration = 30.0
 
     # Update validation dataset config (only fields that exist)
     model.cfg.validation_ds.manifest_filepath = [str(MANIFEST_DIR / "val.json")]
-    model.cfg.validation_ds.batch_size = BATCH_SIZE
+    model.cfg.validation_ds.batch_size = BATCH_SIZE_PER_GPU
     model.cfg.validation_ds.num_workers = 4
 
     print("✓ Dataset config updated")
@@ -86,12 +108,14 @@ def main():
         print(f"✓ Optimizer setup (using default)")
 
     # [6] Setup PyTorch Lightning trainer
-    print("\n[6/7] Setting up PyTorch Lightning trainer...")
+    strategy = 'ddp' if num_gpus > 1 else 'auto'
+    print(f"\n[6/7] Setting up PyTorch Lightning trainer (strategy: {strategy})...")
     
     trainer_cfg = {
         'max_epochs': MAX_EPOCHS,
         'accelerator': 'gpu' if torch.cuda.is_available() else 'cpu',
-        'devices': 1,
+        'devices': num_gpus,
+        'strategy': strategy,
         'num_nodes': 1,
         'log_every_n_steps': 10,
         'val_check_interval': 1.0,
@@ -99,6 +123,10 @@ def main():
         'gradient_clip_val': 1.0,
         'logger': False,  # exp_manager will create its own logger
     }
+    print(f"✓ Configured for {num_gpus} device(s) with effective batch size {effective_batch_size}")
+    
+    print(f"Training strategy: {'DDP (multi-GPU)' if num_gpus > 1 else 'single device'}")
+    print(f"Effective batch size: {effective_batch_size} ({BATCH_SIZE_PER_GPU} × {num_gpus})")
     
     trainer = pl.Trainer(**trainer_cfg)
     
