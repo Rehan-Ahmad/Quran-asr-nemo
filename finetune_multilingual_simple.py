@@ -18,9 +18,9 @@ NEMO_MODEL = "/data/SAB_PhD/quranNemoASR/pretrained_models/stt_en_fastconformer_
 TOKENIZER_DIR = Path("/data/SAB_PhD/quranNemoASR/tokenizer/quran_tokenizer_bpe_v1024")
 MANIFEST_DIR = Path("/data/SAB_PhD/quranNemoASR/data/manifests")
 LOG_DIR = Path("/data/SAB_PhD/quranNemoASR/nemo_experiments/FastConformer-English-Quran-Tokenizer")
-BATCH_SIZE = 16
-MAX_EPOCHS = 5
-LEARNING_RATE = 0.00001
+BATCH_SIZE = 32
+MAX_EPOCHS = 10
+LEARNING_RATE = 0.0003  # 3e-4 - good for fine-tuning with reinitialized decoder
 
 def main():
     print("=" * 80)
@@ -51,9 +51,9 @@ def main():
     model.cfg.train_ds.is_tarred = False
     model.cfg.train_ds.tarred_audio_filepaths = None
     model.cfg.train_ds.batch_size = BATCH_SIZE
-    model.cfg.train_ds.num_workers = 4
+    model.cfg.train_ds.num_workers = 8
     model.cfg.train_ds.pin_memory = True
-    model.cfg.train_ds.max_duration = 20.0
+    model.cfg.train_ds.max_duration = 30.0
 
     # Update validation dataset config (only fields that exist)
     model.cfg.validation_ds.manifest_filepath = [str(MANIFEST_DIR / "val.json")]
@@ -78,8 +78,10 @@ def main():
     # [5] Setup optimizer
     print("\n[5/7] Setting up optimizer...")
     try:
+        # Update learning rate in model config
+        model.cfg.optim.lr = LEARNING_RATE
         model.setup_optimization(model.cfg.optim)
-        print("✓ Optimizer configured")
+        print(f"✓ Optimizer configured (lr={LEARNING_RATE})")
     except Exception as e:
         print(f"✓ Optimizer setup (using default)")
 
