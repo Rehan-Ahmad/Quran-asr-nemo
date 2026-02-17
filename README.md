@@ -44,7 +44,42 @@ Outputs: `nemo_experiments/FastConformer-Streaming-Custom-Tokenizer-*/`
 
 ### 4. Evaluate
 ```bash
-python evaluate.py 20   # Evaluate on 20 samples
+python evaluate.py
+```
+
+The evaluation script is **interactive**:
+1. Automatically discovers all trained models in `nemo_experiments/`
+2. Shows available models with type (STREAMING 🌊 or STANDARD 📶)
+3. You select which model to evaluate (enter 1, 2, 3, etc.)
+4. You choose how many samples to test (default 20, max 3,745)
+5. System adapts evaluation based on model type
+6. Shows results with accuracy percentage
+
+Example:
+```
+🎙️  Quran ASR Model Evaluator
+
+================================================================================
+📦 AVAILABLE MODELS
+================================================================================
+ 1. [📶 STANDARD] FastConformer-Custom-Tokenizer/...nemo
+    Size: 438.5 MB
+ 2. [🌊 STREAMING] FastConformer-Streaming-Custom-Tokenizer/...nemo
+    Size: 439.1 MB
+
+================================================================================
+Select model (1-2): 1
+
+✓ Selected: FastConformer-Custom-Tokenizer
+✓ Type: STANDARD
+
+How many samples to evaluate? (default 20): 50
+
+================================================================================
+📊 EVALUATING (Standard Mode)
+================================================================================
+
+Results: 45/50 correct (90.0% accuracy)
 ```
 
 ## Configuration
