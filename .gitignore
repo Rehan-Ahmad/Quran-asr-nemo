@@ -49,3 +49,4 @@ env/
 .env
 .hf_cache/
 evaluation_results.json
+training.log
