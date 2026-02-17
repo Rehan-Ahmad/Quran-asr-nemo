@@ -256,49 +256,71 @@ def get_tokenizer_path() -> Optional[Path]:
 
 
 def transcribe_manifest(model: ASRModel, cfg: EvaluationConfig, samples: List[dict]) -> List[dict]:
-    """Transcribe all samples and add predictions to manifest."""
-    logging.info(f"Transcribing {len(samples)} samples...")
-    
-    output_samples = []
-    
-    for idx, sample in enumerate(samples):
-        audio_path = sample['audio_filepath']
-        
+    """Transcribe all samples in batches and add predictions to manifest.
+
+    Uses `cfg.batch_size` to group audio files into batches. If a batch
+    transcription fails, falls back to per-sample transcription for that
+    batch to maximize robustness.
+    """
+    total = len(samples)
+    logging.info(f"Transcribing {total} samples in batches (batch_size={cfg.batch_size})...")
+
+    output_samples: List[dict] = []
+
+    # Helper to transcribe a list of audio paths and append results
+    def _transcribe_and_append(audio_paths: List[str], batch_samples: List[dict]):
         try:
-            # Transcribe with appropriate decoder for streaming/hybrid models
             if cfg.decoder_type:
-                predictions = model.transcribe(
-                    [audio_path], 
-                    batch_size=1,
-                    decoder_type=cfg.decoder_type  # type: ignore
-                )
+                preds = model.transcribe(audio_paths, batch_size=len(audio_paths), decoder_type=cfg.decoder_type)  # type: ignore
             else:
-                predictions = model.transcribe([audio_path], batch_size=1)
-            
-            # Extract text from Hypothesis object
-            if predictions and hasattr(predictions[0], 'text'):
-                pred_text = predictions[0].text
-            else:
-                pred_text = str(predictions[0]) if predictions else ""
-            
+                preds = model.transcribe(audio_paths, batch_size=len(audio_paths))
+
+            for sample_obj, hyp in zip(batch_samples, preds):
+                if hyp is None:
+                    text = ""
+                elif hasattr(hyp, 'text'):
+                    text = hyp.text
+                else:
+                    text = str(hyp)
+
+                output_samples.append({**sample_obj, 'pred_text': text})
+
         except KeyboardInterrupt:
             logging.info("Transcription interrupted by user")
             sys.exit(0)
         except Exception as e:
-            logging.warning(f"Failed to transcribe {audio_path}: {e}")
-            pred_text = ""
-        
-        # Add prediction to sample
-        output_samples.append({
-            **sample,
-            'pred_text': pred_text
-        })
-        
-        # Progress reporting every 10% of samples
-        progress_interval = max(1, len(samples) // 10)
-        if (idx + 1) % progress_interval == 0 or (idx + 1) == len(samples):
-            logging.info(f"  Progress: {idx + 1}/{len(samples)}")
-    
+            logging.warning(f"Batch transcription failed ({len(audio_paths)} items): {e}. Falling back to per-sample.")
+            # Fallback: transcribe items one-by-one
+            for single_path, single_sample in zip(audio_paths, batch_samples):
+                try:
+                    if cfg.decoder_type:
+                        single_preds = model.transcribe([single_path], batch_size=1, decoder_type=cfg.decoder_type)  # type: ignore
+                    else:
+                        single_preds = model.transcribe([single_path], batch_size=1)
+
+                    hyp = single_preds[0] if single_preds else None
+                    text = hyp.text if (hyp is not None and hasattr(hyp, 'text')) else (str(hyp) if hyp is not None else "")
+                except Exception as ex:
+                    logging.warning(f"Failed to transcribe {single_path}: {ex}")
+                    text = ""
+
+                output_samples.append({**single_sample, 'pred_text': text})
+
+    # Process in batches
+    batch_size = max(1, int(cfg.batch_size))
+    progress_interval = max(1, total // 10)
+
+    for start in range(0, total, batch_size):
+        end = min(start + batch_size, total)
+        batch = samples[start:end]
+        audio_paths = [s['audio_filepath'] for s in batch]
+
+        _transcribe_and_append(audio_paths, batch)
+
+        # Progress reporting
+        if end % progress_interval == 0 or end == total:
+            logging.info(f"  Progress: {end}/{total}")
+
     logging.info("Transcription complete")
     return output_samples
 
