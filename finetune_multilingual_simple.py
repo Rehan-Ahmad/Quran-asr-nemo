@@ -18,14 +18,14 @@ from nemo.collections.asr.models import ASRModel
 from nemo.utils.exp_manager import exp_manager
 
 # ------ CONFIG ------
-NEMO_MODEL = "/data/SAB_PhD/quranNemoASR/pretrained_models/stt_en_fastconformer_hybrid_large_streaming_multi.nemo"
-TOKENIZER_DIR = Path("/data/SAB_PhD/quranNemoASR/tokenizer/quran_tokenizer_bpe_v1024")
-MANIFEST_DIR = Path("/data/SAB_PhD/quranNemoASR/data/manifests")
-LOG_DIR = Path("/data/SAB_PhD/quranNemoASR/nemo_experiments/FastConformer-English-Quran-Tokenizer")
+NEMO_MODEL = os.getenv("NEMO_MODEL", "/data/SAB_PhD/quranNemoASR/pretrained_models/stt_en_fastconformer_hybrid_large_streaming_multi.nemo")
+TOKENIZER_DIR = Path(os.getenv("TOKENIZER_DIR", "/data/SAB_PhD/quranNemoASR/tokenizer/quran_tokenizer_bpe_v1024"))
+MANIFEST_DIR = Path(os.getenv("MANIFEST_DIR", "/data/SAB_PhD/quranNemoASR/data/manifests"))
+LOG_DIR = Path(os.getenv("LOG_DIR", "/data/SAB_PhD/quranNemoASR/nemo_experiments/FastConformer-English-Quran-Tokenizer"))
 
 # Hardware-aware configuration (override via environment variables if needed)
 BATCH_SIZE_PER_GPU = int(os.getenv("BATCH_SIZE_PER_GPU", "32"))  # Per-GPU batch
-MAX_EPOCHS = int(os.getenv("MAX_EPOCHS", "10"))
+MAX_EPOCHS = int(os.getenv("MAX_EPOCHS", "50"))
 LEARNING_RATE = 1
 
 def main():
@@ -51,6 +51,7 @@ def main():
 
     # [1] Load base model from NEMO checkpoint
     print("\n[1/7] Loading model from checkpoint...")
+    print(f"  checkpoint: {NEMO_MODEL}")
     model = ASRModel.restore_from(NEMO_MODEL)
     num_params = sum(p.numel() for p in model.parameters())
     print(f"✓ Model loaded ({num_params / 1e6:.0f}M params)")
