@@ -51,3 +51,18 @@ env/
 evaluation_results.json
 training.log
 training.log
+
+# Reference models (large downloads)
+reference_models/
+
+# Gradio
+.gradio/
+
+# Temporary files
+temp_*.wav
+*.log
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+Online_*.ipynb
+stream_*.py
