@@ -1,0 +1,52 @@
+[
+  {
+    "context": "Streaming [70, 13] (Best Accuracy)",
+    "wer": 9.04400140913199,
+    "cer": 5.254987919787817,
+    "exact_match_count": 2772,
+    "exact_match_rate": 74.01869158878505,
+    "avg_inference_time": 0.0636575394542577,
+    "throughput": 15.709058323226088,
+    "total_samples": 3745
+  },
+  {
+    "context": "Streaming [70, 6] (Balanced)",
+    "wer": 8.850551974992358,
+    "cer": 4.8746943235964455,
+    "exact_match_count": 2764,
+    "exact_match_rate": 73.80507343124165,
+    "avg_inference_time": 0.06164317341130948,
+    "throughput": 16.222396490323018,
+    "total_samples": 3745
+  },
+  {
+    "context": "Streaming [70, 1] (Low Latency)",
+    "wer": 9.525419269329948,
+    "cer": 5.606038855787322,
+    "exact_match_count": 2732,
+    "exact_match_rate": 72.95060080106809,
+    "avg_inference_time": 0.06143262414970449,
+    "throughput": 16.27799583431616,
+    "total_samples": 3745
+  },
+  {
+    "context": "Streaming [70, 0] (Causal Only)",
+    "wer": 9.753721115547295,
+    "cer": 5.716799847354466,
+    "exact_match_count": 2708,
+    "exact_match_rate": 72.30974632843792,
+    "avg_inference_time": 0.06172713278450857,
+    "throughput": 16.20033127880785,
+    "total_samples": 3745
+  },
+  {
+    "context": "Non-Streaming (Full Context)",
+    "wer": 4.63370999672354,
+    "cer": 2.0841645073356343,
+    "exact_match_count": 2987,
+    "exact_match_rate": 79.75967957276369,
+    "avg_inference_time": 0.06365926574482937,
+    "throughput": 15.708632330262521,
+    "total_samples": 3745
+  }
+]
