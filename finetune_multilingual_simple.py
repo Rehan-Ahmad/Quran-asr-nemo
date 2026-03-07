@@ -164,6 +164,33 @@ def main():
     
     print("-" * 80)
     print("\n✓ Training completed successfully!")
+    
+    # [8] Convert best checkpoint to .nemo format
+    print("\n[8/8] Converting best checkpoint to .nemo format...")
+    best_checkpoint = trainer.checkpoint_callback.best_model_path if trainer.checkpoint_callback else None
+    
+    if best_checkpoint and Path(best_checkpoint).exists():
+        from nemo.collections.asr.models import EncDecHybridRNNTCTCBPEModel
+        
+        nemo_output = Path(best_checkpoint).parent / Path(best_checkpoint).stem.replace('=', '_') + '.nemo'
+        # Or use explicit naming:
+        # nemo_output = Path(best_checkpoint).parent / f"FastConformer-Custom-Tokenizer-final.nemo"
+        
+        print(f"  Best checkpoint: {best_checkpoint}")
+        print(f"  Converting to: {nemo_output}")
+        
+        try:
+            ckpt_model = EncDecHybridRNNTCTCBPEModel.load_from_checkpoint(best_checkpoint, map_location='cpu')
+            ckpt_model.save_to(str(nemo_output))
+            print(f"✓ Conversion complete: {nemo_output}")
+            print(f"  File size: {nemo_output.stat().st_size / (1024**3):.2f} GB")
+        except Exception as e:
+            print(f"⚠️  Warning - Conversion failed: {e}")
+            print(f"  You can manually convert later using:")
+            print(f"  python convert_ckpt_to_nemo.py --ckpt '{best_checkpoint}' --output '<output.nemo>'")
+    else:
+        print("⚠️  No checkpoint found to convert (training may have encountered issues)")
+    
     print("=" * 80)
 
 if __name__ == "__main__":
