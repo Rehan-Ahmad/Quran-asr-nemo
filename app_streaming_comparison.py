@@ -190,22 +190,22 @@ def format_result(result: Dict, reference: str, mode: str) -> str:
         return f"<p><i>{mode} mode not selected</i></p>"
     
     html = f"""
-    <div style="padding: 15px; background-color: #f0f0f0; border-radius: 8px; margin: 10px 0;">
+    <div style="padding: 15px; background-color: #f0f0f0; border-radius: 8px; margin: 10px 0; color: #2c3e50;">
         <h3 style="margin-top: 0; color: #2c3e50;">🎯 {mode} Result</h3>
         
-        <div style="margin: 10px 0;">
-            <strong>📝 Transcription:</strong>
+        <div style="margin: 10px 0; color: #2c3e50;">
+            <strong style="color: #2c3e50;">📝 Transcription:</strong>
             <div style="padding: 10px; background-color: white; border-left: 4px solid #3498db; margin-top: 5px; font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 18px; direction: rtl; color: #2c3e50;">
                 {result['text']}
             </div>
         </div>
         
-        <div style="margin: 10px 0;">
-            <strong>⏱️ Inference Time:</strong> <code>{result['time']:.3f}s</code>
+        <div style="margin: 10px 0; color: #2c3e50;">
+            <strong style="color: #2c3e50;">⏱️ Inference Time:</strong> <code style="color: #e74c3c;">{result['time']:.3f}s</code>
         </div>
         
-        <div style="margin: 10px 0;">
-            <strong>🔧 Context Window:</strong> <code>{result['context']}</code>
+        <div style="margin: 10px 0; color: #2c3e50;">
+            <strong style="color: #2c3e50;">🔧 Context Window:</strong> <code style="color: #8e44ad;">{result['context']}</code>
             <br/>
             <small style="color: #7f8c8d;">{result.get('context_description', '')}</small>
         </div>
@@ -219,12 +219,12 @@ def format_result(result: Dict, reference: str, mode: str) -> str:
         exact_match = reference == pred_text
         
         html += f"""
-        <div style="margin: 15px 0; padding: 10px; background-color: #ecf0f1; border-radius: 5px;">
-            <strong>📊 Accuracy Metrics:</strong>
-            <ul style="margin: 5px 0;">
-                <li>WER: <code>{wer_score:.2f}%</code></li>
-                <li>CER: <code>{cer_score:.2f}%</code></li>
-                <li>Exact Match: <code>{'✅ Yes' if exact_match else '❌ No'}</code></li>
+        <div style="margin: 15px 0; padding: 10px; background-color: #ecf0f1; border-radius: 5px; color: #2c3e50;">
+            <strong style="color: #2c3e50;">📊 Accuracy Metrics:</strong>
+            <ul style="margin: 5px 0; color: #2c3e50;">
+                <li style="color: #2c3e50;">WER: <code style="color: #e74c3c;">{wer_score:.2f}%</code></li>
+                <li style="color: #2c3e50;">CER: <code style="color: #e74c3c;">{cer_score:.2f}%</code></li>
+                <li style="color: #2c3e50;">Exact Match: <code style="color: {'#27ae60' if exact_match else '#e74c3c'};">{'✅ Yes' if exact_match else '❌ No'}</code></li>
             </ul>
         </div>
         """
