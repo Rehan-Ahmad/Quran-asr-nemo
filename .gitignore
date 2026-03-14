@@ -62,6 +62,10 @@ reference_models/
 temp_*.wav
 *.log
 
+# Evaluation outputs
+*.json
+*.jsonl
+
 # Jupyter notebooks
 .ipynb_checkpoints/
 Online_*.ipynb
