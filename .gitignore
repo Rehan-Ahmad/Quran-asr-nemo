@@ -69,4 +69,3 @@ temp_*.wav
 # Jupyter notebooks
 .ipynb_checkpoints/
 Online_*.ipynb
-stream_*.py
